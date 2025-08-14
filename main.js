@@ -1,0 +1,1083 @@
+/* 3D Tile Connect - Vanilla JS */
+(function () {
+  const boardEl = document.getElementById('board');
+  const overlayEl = document.getElementById('overlay');
+  const timeEl = document.getElementById('time');
+  const matchesEl = document.getElementById('matches');
+  const remainingEl = document.getElementById('remaining');
+  const levelEl = document.getElementById('level');
+  const scoreEl = document.getElementById('score');
+  const newGameBtn = document.getElementById('newGameBtn');
+  const shuffleBtn = document.getElementById('shuffleBtn');
+  const hintBtn = document.getElementById('hintBtn');
+  const tilesetSelect = document.getElementById('tilesetSelect');
+  const langSelect = document.getElementById('langSelect');
+  const startLevelInput = document.getElementById('startLevelInput');
+  const menuBtn = document.getElementById('menuBtn');
+  const menuDialog = document.getElementById('menuDialog');
+  const menuCloseBtn = document.getElementById('menuCloseBtn');
+  const toastEl = document.getElementById('toast');
+  const fxEl = document.getElementById('fx');
+  const pageBgEl = document.getElementById('page-bg');
+
+  // User zoom override (multiplies auto scale)
+  let USER_SCALE = 1; // 1.0 = no override
+  const MIN_USER_SCALE = 0.6;
+  const MAX_USER_SCALE = 1.6;
+  let LAST_AUTO_SCALE = 1; // updated by adjustTileScale
+
+  function applyBoardScale(autoScale) {
+    const final = Math.max(0.4, Math.min(2.0, autoScale * USER_SCALE));
+    document.documentElement.style.setProperty('--board-scale', String(final));
+  }
+
+  // Config (dynamic sizing per level)
+  let ROWS = 8;        // interior rows (without outer boundary)
+  let COLS = 12;       // interior cols (without outer boundary)
+  // Tile sets
+  const TILE_SETS = {
+    thai: [
+      'elephant','tuktuk','boat','lotus','chili','mango','coconut','durian','palm','buddha','rooster',
+      'temple','khonmask','umbrella','orchid','thaitea','bananaleaf','sala','krathong','naga','drum','ricebowl',
+      'padthai','tomyum','somtam','mangostickyrice','padkrapao'
+    ],
+    dinosaur: [
+      'trex','stegosaurus','triceratops','pterodactyl','brachiosaurus','raptor','ankylosaurus','parasaurolophus','spinosaurus','dilophosaurus','egg','footprint',
+      'allosaurus','carnotaurus','giganotosaurus','pachycephalosaurus','ceratosaurus','iguanodon','protoceratops','therizinosaurus','mosasaurus','archaeopteryx','apatosaurus','coelophysis'
+    ]
+  };
+  function getParam(name, def) { const u=new URLSearchParams(location.search); return u.get(name) ?? def; }
+  const currentTileSet = (getParam('tileset','thai') in TILE_SETS) ? getParam('tileset','thai') : 'thai';
+  const TILE_KEYS = TILE_SETS[currentTileSet];
+  const TILE_PNG = Object.fromEntries(TILE_KEYS.map(k => [k, `assets/tiles_png/${k}.png`]));
+  const TILE_SVG = Object.fromEntries(TILE_KEYS.map(k => [k, `assets/tiles/${k}.svg`]));
+  const TILE_FALLBACK = 'assets/tiles/placeholder.svg';
+
+  // Optional Spritesheet mode via URL params
+  const SHEET_URL = getParam('sheet', null);
+  const SHEET_COLS = parseInt(getParam('sheetCols', '0'), 10) || 0;
+  const SHEET_ROWS = parseInt(getParam('sheetRows', '0'), 10) || 0;
+  const USE_SHEET = !!(SHEET_URL && SHEET_COLS > 0 && SHEET_ROWS > 0);
+
+  // State
+  let grid = [];         // (ROWS+2) x (COLS+2) grid including boundary
+  let nodes = [];        // DOM cells for interior
+  let selected = null;   // {r,c, el, type}
+  let matches = 0;
+  let remaining = 0;     // number of tiles left
+  let startTs = 0;
+  let timerHandle = null;
+  let level = 1;
+  let score = 0;
+  let gameOver = false;
+  let inTransition = false;
+
+  // Scoring config
+  const START_SCORE = 50;
+  const SCORE_PER_MATCH = 4;
+  const PENALTY_FAIL = 2;
+  const PENALTY_SHUFFLE = 5;
+
+  // Performance helpers
+  function prefersReducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+  function computeMoveMs() {
+    const tiles = ROWS * COLS;
+    let ms = 220;
+    if (tiles >= 1600) ms = 150; // 40x40+
+    else if (tiles >= 800) ms = 180; // ~28x28+
+    if (prefersReducedMotion()) ms -= 40;
+    return Math.max(130, ms);
+  }
+
+  // Utils
+  const rand = (n) => Math.floor(Math.random()*n);
+  const shuffle = (arr) => { for (let i=arr.length-1;i>0;i--){ const j=rand(i+1); [arr[i],arr[j]]=[arr[j],arr[i]];} return arr; };
+
+  function fmtTime(sec) {
+    const m = Math.floor(sec/60), s = sec % 60;
+    return `${m}:${s.toString().padStart(2,'0')}`;
+  }
+
+  function setBoardDims(r, c) {
+    boardEl.style.setProperty('--rows', r);
+    boardEl.style.setProperty('--cols', c);
+    // Also set on root for inheritance fallback
+    document.documentElement.style.setProperty('--rows', r);
+    document.documentElement.style.setProperty('--cols', c);
+  }
+
+  function sizeForLevel(lvl) {
+    // Aspect-aware sizing: choose rows/cols from target area to fit wrapper ratio.
+    // Orientation bias: portrait -> rows > cols; landscape -> cols > rows.
+    const wrapper = document.getElementById('board-wrapper');
+    const rect = wrapper?.getBoundingClientRect();
+    const w = rect?.width || window.innerWidth || 1024;
+    const h = rect?.height || window.innerHeight || 768;
+    const ratio = w / Math.max(1, h);
+    // Hysteresis buckets to avoid flapping near 1:1
+    const smallPhone = Math.min(w, h) <= 420; // tighter caps on phones
+    const longMax = smallPhone ? 10 : 14;
+    const shortMax = smallPhone ? 7 : 10; // reduce short side to keep tiles usable
+    const bucket = (ratio >= 1.15) ? 'landscape' : (ratio <= 0.85) ? 'portrait' : 'square';
+    const caps = bucket === 'landscape'
+      ? { minR: 4, minC: 4, maxR: shortMax, maxC: longMax }
+      : bucket === 'portrait'
+        ? { minR: 4, minC: 4, maxR: longMax, maxC: shortMax }
+        : { minR: 4, minC: 4, maxR: 12, maxC: 12 }; // near-square -> balanced
+
+    const steps = Math.max(0, Math.floor(lvl) - 1);
+    const targetArea = (4 + steps) * (4 + steps); // preserve progression from 4x4
+
+    // Ideal rows/cols approximating target area under current aspect ratio
+    const idealRowsFloat = Math.sqrt(targetArea / ratio);
+    let rows = Math.round(idealRowsFloat);
+    rows = Math.max(caps.minR, Math.min(caps.maxR, rows));
+    let cols = Math.ceil(targetArea / rows);
+    cols = Math.max(caps.minC, Math.min(caps.maxC, cols));
+
+    // Enforce orientation bias strictly when possible
+    if (bucket === 'portrait' && rows <= cols) {
+      rows = Math.min(caps.maxR, Math.max(rows, Math.min(caps.maxR, cols + 1)));
+      cols = Math.max(caps.minC, Math.min(caps.maxC, Math.ceil(targetArea / Math.max(rows,1))));
+    } else if (bucket === 'landscape' && cols <= rows) {
+      cols = Math.min(caps.maxC, Math.max(cols, Math.min(caps.maxC, rows + 1)));
+      rows = Math.max(caps.minR, Math.min(caps.maxR, Math.ceil(targetArea / Math.max(cols,1))));
+    }
+
+    // If still under target area due to caps, try adjusting the other dimension
+    if (rows * cols < targetArea) {
+      // try grow rows if possible
+      if (rows < caps.maxR) rows = Math.min(caps.maxR, Math.ceil(targetArea / Math.max(cols, 1)));
+      // recalc cols to match rows
+      cols = Math.max(caps.minC, Math.min(caps.maxC, Math.ceil(targetArea / Math.max(rows, 1))));
+    }
+
+    // Enforce sane grid ratio (avoid extremely skinny grids)
+    const gridRatio = cols / rows;
+    const maxAllowedRatio = 2.4; // allow up to ~6x14 in portrait
+    if (gridRatio > maxAllowedRatio && cols > caps.minC) {
+      const reduce = Math.min(cols - caps.minC, Math.ceil(cols - 2 * rows));
+      cols -= Math.max(0, reduce);
+    } else if (gridRatio < 0.5 && rows > caps.minR) {
+      const reduce = Math.min(rows - caps.minR, Math.ceil(rows - 2 * cols));
+      rows -= Math.max(0, reduce);
+    }
+
+    // Final orientation guarantee (best-effort within caps)
+    if (bucket === 'portrait' && rows <= cols) {
+      if (rows < caps.maxR) rows = Math.min(caps.maxR, cols + 1);
+      else if (cols > caps.minC) cols = Math.max(caps.minC, rows - 1);
+    } else if (bucket === 'landscape' && cols <= rows) {
+      if (cols < caps.maxC) cols = Math.min(caps.maxC, rows + 1);
+      else if (rows > caps.minR) rows = Math.max(caps.minR, cols - 1);
+    }
+
+    return { rows, cols };
+  }
+
+  function adjustTileScale() {
+    const wrapper = document.getElementById('board-wrapper');
+    if (!wrapper) return;
+    const rect = wrapper.getBoundingClientRect();
+    const csRoot = getComputedStyle(document.documentElement);
+    const defaultGap = parseFloat(csRoot.getPropertyValue('--tile-gap')) || 10;
+    const isCoarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    // Dimension/input-driven minimums (no UA sniffing)
+    const minTile = isCoarse ? 42 : 28; // larger tap targets on coarse pointers
+    const maxTile = 120;
+
+    // Reduce gap for larger boards (down to ~2px as boards get huge)
+    const maxSide = Math.max(ROWS, COLS);
+    const gap = Math.max(1, Math.min(defaultGap, Math.round(defaultGap - (maxSide - 5) / (50 - 5) * 6)));
+    document.documentElement.style.setProperty('--tile-gap', gap + 'px');
+
+    const wAvail = rect.width;
+    const hAvail = rect.height;
+
+    // Compute ideal tile size that fits without scaling
+    const fitTile = Math.floor(Math.min(
+      (wAvail - gap * (COLS + 1)) / COLS,
+      (hAvail - gap * (ROWS + 1)) / ROWS
+    ));
+
+    // Start from clamped size
+    let tileSize = Math.max(minTile, Math.min(maxTile, fitTile));
+    document.documentElement.style.setProperty('--tile-size', tileSize + 'px');
+
+    // Compute content size at this tile size to check overflow
+    const needW = tileSize * COLS + gap * (COLS + 1);
+    const needH = tileSize * ROWS + gap * (ROWS + 1);
+    let scale = 1;
+    if (needW > wAvail || needH > hAvail) {
+      // If even the minimum tile overflows, fall back to uniform board scale
+      // Keep at least the minimum tile px for legibility; scale board visually to fit
+      if (tileSize > minTile) {
+        // try smaller tile down to min
+        tileSize = minTile;
+        document.documentElement.style.setProperty('--tile-size', tileSize + 'px');
+      }
+      const minNeedW = tileSize * COLS + gap * (COLS + 1);
+      const minNeedH = tileSize * ROWS + gap * (ROWS + 1);
+      scale = Math.min(wAvail / Math.max(1, minNeedW), hAvail / Math.max(1, minNeedH), 1);
+    }
+    LAST_AUTO_SCALE = scale;
+    applyBoardScale(LAST_AUTO_SCALE);
+
+    // Adjust tilt slightly when vertical space is tight to save height
+    const targetTilt = (hAvail < 520) ? 22 : (hAvail < 640) ? 26 : 30;
+    document.documentElement.style.setProperty('--board-rotate-x', targetTilt + 'deg');
+  }
+
+  function makePairs(pairCount) {
+    // Choose a random subset of tile types for this game.
+    // If we need more pairs than unique keys, cycle through shuffled keys.
+    const keysShuffled = shuffle([...TILE_KEYS]);
+    const needed = pairCount;
+    const types = [];
+    while (types.length < needed) {
+      const batch = types.length === 0 ? keysShuffled : shuffle([...TILE_KEYS]);
+      for (const k of batch) {
+        types.push(k);
+        if (types.length >= needed) break;
+      }
+    }
+    const pairs = [];
+    for (const t of types.slice(0, needed)) pairs.push(t, t);
+    return pairs;
+  }
+
+  function createGrid() {
+    // Allocate grid with boundary zeros
+    grid = Array.from({length: ROWS+2}, () => Array.from({length: COLS+2}, () => 0));
+    const interiorCount = ROWS * COLS;
+    // Fill as many tiles as the raster allows (leave one empty for odd cell counts)
+    let pairsTarget = Math.floor(interiorCount / 2);
+    const symbols = shuffle(makePairs(pairsTarget));
+    remaining = pairsTarget * 2;
+    matches = 0;
+    updateStats();
+
+    // Choose random interior positions and place symbols; rest remain empty
+    const positions = [];
+    for (let r=1; r<=ROWS; r++) for (let c=1; c<=COLS; c++) positions.push([r,c]);
+    shuffle(positions);
+    for (let i=0; i<symbols.length; i++) {
+      const [r,c] = positions[i];
+      grid[r][c] = symbols[i];
+    }
+  }
+
+  function renderGrid() {
+    boardEl.innerHTML = '';
+    overlayEl.innerHTML = '';
+    setBoardDims(ROWS, COLS);
+    nodes = Array.from({length: ROWS}, () => Array.from({length: COLS}, () => null));
+
+    // Spritesheet CSS variables (set once)
+    if (USE_SHEET) {
+      boardEl.style.setProperty('--sheet-image', `url('${SHEET_URL}')`);
+      boardEl.style.setProperty('--sheet-cols', String(SHEET_COLS));
+      boardEl.style.setProperty('--sheet-rows', String(SHEET_ROWS));
+    }
+
+    const frag = document.createDocumentFragment();
+    for (let r=1; r<=ROWS; r++) {
+      for (let c=1; c<=COLS; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.r = r;
+        cell.dataset.c = c;
+        if (grid[r][c] !== 0) {
+          const tile = document.createElement('button');
+          tile.type = 'button';
+          tile.className = 'tile';
+          tile.dataset.type = grid[r][c];
+          tile.setAttribute('aria-label', `Tile ${grid[r][c]}`);
+          if (USE_SHEET) {
+            tile.classList.add('sprite');
+            // map key to index in sheet by TILE_KEYS order
+            const idx = TILE_KEYS.indexOf(grid[r][c]);
+            const col = (idx % SHEET_COLS + SHEET_COLS) % SHEET_COLS;
+            const row = Math.floor(idx / SHEET_COLS);
+            // compute position percentages safely
+            const xPerc = (SHEET_COLS > 1) ? (col * 100 / (SHEET_COLS - 1)) : 0;
+            const yPerc = (SHEET_ROWS > 1) ? (row * 100 / (SHEET_ROWS - 1)) : 0;
+            tile.style.backgroundPosition = `${xPerc}% ${yPerc}%`;
+          } else {
+            const img = document.createElement('img');
+            img.alt = grid[r][c];
+            img.draggable = false;
+            img.decoding = 'async';
+            img.src = TILE_PNG[grid[r][c]] || TILE_SVG[grid[r][c]] || TILE_FALLBACK;
+            img.onerror = () => {
+              if (img.src.endsWith('.png') && TILE_SVG[grid[r][c]]) { img.src = TILE_SVG[grid[r][c]]; return; }
+              img.src = TILE_FALLBACK; img.onerror = null;
+            };
+            tile.appendChild(img);
+          }
+          cell.appendChild(tile);
+        }
+        nodes[r-1][c-1] = cell;
+        frag.appendChild(cell);
+      }
+    }
+    boardEl.appendChild(frag);
+    // Recompute tile size once DOM is updated
+    adjustTileScale();
+    updatePerfMode();
+  }
+
+  function onTileClickEl(tileEl) {
+    if (gameOver || inTransition) return;
+    const r = +tileEl.parentElement.dataset.r;
+    const c = +tileEl.parentElement.dataset.c;
+    const type = grid[r][c];
+
+    if (!type) return;
+
+    if (!selected) {
+      selected = { r, c, type, el: tileEl };
+      tileEl.classList.add('selected');
+      dimNonMatching(type);
+      return;
+    }
+
+    // Clicking the same tile deselects
+    if (selected.r === r && selected.c === c) {
+      clearSelection();
+      return;
+    }
+
+    if (type !== selected.type) {
+      pulse(tileEl, 'danger');
+      pulse(selected.el, 'danger');
+      animateOnce(tileEl, 'anim-fail', 280);
+      animateOnce(selected.el, 'anim-fail', 280);
+      adjustScore(-PENALTY_FAIL);
+      clearSelection();
+      return;
+    }
+
+    const path = findPath([selected.r, selected.c], [r, c]);
+    if (path) {
+      drawPath(path);
+      animateOnce(tileEl, 'anim-success', 240);
+      animateOnce(selected.el, 'anim-success', 240);
+      removeTiles([selected.r, selected.c], [r, c]);
+      matches++;
+      adjustScore(SCORE_PER_MATCH);
+      remaining -= 2;
+      updateStats();
+      clearSelection();
+      // After removal animation, apply gravity, then horizontal compaction, then check for win
+      inTransition = true;
+      applyGravity()
+        .then(() => applyHorizontalCompaction())
+        .then(() => { inTransition = false; checkWin(); });
+    } else {
+      // Not connectable within 2 turns
+      pulse(tileEl, 'warn');
+      pulse(selected.el, 'warn');
+      adjustScore(-PENALTY_FAIL);
+      clearSelection();
+    }
+  }
+
+  // Event delegation: single click listener on board
+  boardEl.addEventListener('click', (e) => {
+    const tileEl = e.target && e.target.closest && e.target.closest('.tile');
+    if (!tileEl || !boardEl.contains(tileEl)) return;
+    onTileClickEl(tileEl);
+  });
+
+  function dimNonMatching(type) {
+    document.querySelectorAll('.tile').forEach(el => {
+      if (el.dataset.type !== type) el.classList.add('dim');
+    });
+  }
+  function undimAll() { document.querySelectorAll('.tile.dim').forEach(el => el.classList.remove('dim')); }
+
+  function clearSelection() {
+    if (selected) selected.el.classList.remove('selected');
+    selected = null;
+    undimAll();
+  }
+
+  function pulse(el, kind) {
+    const color = kind === 'danger' ? '#ff6b6b' : kind === 'warn' ? '#ffb84d' : '#6bd6ff';
+    el.style.boxShadow = `0 0 0 3px ${color} inset, 0 16px 24px rgba(0,0,0,0.35)`;
+    setTimeout(() => { el.style.boxShadow = ''; }, 180);
+  }
+
+  function removeTiles(p1, p2) {
+    const [r1,c1] = p1, [r2,c2] = p2;
+    grid[r1][c1] = 0;
+    grid[r2][c2] = 0;
+    const n1 = nodes[r1-1][c1-1].querySelector('.tile');
+    const n2 = nodes[r2-1][c2-1].querySelector('.tile');
+    if (n1) n1.classList.add('matched');
+    if (n2) n2.classList.add('matched');
+    // remove from DOM shortly after animation
+    setTimeout(() => {
+      if (n1?.parentElement) n1.parentElement.innerHTML = '';
+      if (n2?.parentElement) n2.parentElement.innerHTML = '';
+    }, 320);
+  }
+
+  function applyGravity() {
+    return new Promise((resolve) => {
+      // Plan moves per column: pull down to fill gaps
+      const moves = [];
+      for (let c = 1; c <= COLS; c++) {
+        let write = ROWS;
+        for (let r = ROWS; r >= 1; r--) {
+          if (grid[r][c] !== 0) {
+            if (r !== write) {
+              moves.push({ from: { r, c }, to: { r: write, c } });
+            }
+            write--;
+          }
+        }
+      }
+      if (moves.length === 0) {
+        resolve();
+        return;
+      }
+      // Animate moves using DOM positions
+      // Batch DOM reads (getBoundingClientRect) before writes (style changes)
+      overlayEl.getBoundingClientRect(); // force layout once
+      const centerCache = new Map();
+      const keyFor = (r, c) => r + ',' + c;
+      const getCenter = (r, c) => {
+        const k = keyFor(r, c);
+        if (centerCache.has(k)) return centerCache.get(k);
+        const cell = nodes[r-1]?.[c-1];
+        const rect = cell?.getBoundingClientRect();
+        const val = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+        centerCache.set(k, val);
+        return val;
+      };
+      // Read phase: compute centers for all from/to
+      moves.forEach(({from, to}) => { getCenter(from.r, from.c); getCenter(to.r, to.c); });
+      // Write phase: apply transforms in next frame
+      const MOVE_MS = computeMoveMs();
+      requestAnimationFrame(() => {
+        moves.forEach(({from, to}) => {
+          const el = nodes[from.r-1][from.c-1].querySelector('.tile');
+          if (!el) return;
+          const a = getCenter(from.r, from.c);
+          const b = getCenter(to.r, to.c);
+          const dy = b.y - a.y;
+          el.style.transition = `transform ${MOVE_MS}ms ease`;
+          el.style.transform = `translateZ(10px) translateY(${dy}px)`;
+          el.style.pointerEvents = 'none';
+        });
+      });
+      // After animation, update grid and rerender
+      setTimeout(() => {
+        for (let c = 1; c <= COLS; c++) {
+          const colVals = [];
+          for (let r = ROWS; r >= 1; r--) if (grid[r][c] !== 0) colVals.push(grid[r][c]);
+          for (let r = ROWS; r >= 1; r--) {
+            const val = colVals[ROWS - r] ?? 0;
+            grid[r][c] = val;
+          }
+        }
+        renderGrid();
+        resolve();
+      }, computeMoveMs() + 10);
+    });
+  }
+
+  function applyHorizontalCompaction() {
+    return new Promise((resolve) => {
+      const moves = [];
+      for (let r = 1; r <= ROWS; r++) {
+        let write = 1; // fill from left to right
+        for (let c = 1; c <= COLS; c++) {
+          if (grid[r][c] !== 0) {
+            if (c !== write) {
+              moves.push({ from: { r, c }, to: { r, c: write } });
+            }
+            write++;
+          }
+        }
+      }
+      if (moves.length === 0) { resolve(); return; }
+      // Batch DOM reads (getBoundingClientRect) before writes
+      const centerCache = new Map();
+      const keyFor = (r, c) => r + ',' + c;
+      const getCenter = (r, c) => {
+        const k = keyFor(r, c);
+        if (centerCache.has(k)) return centerCache.get(k);
+        const cell = nodes[r-1]?.[c-1];
+        const rect = cell?.getBoundingClientRect();
+        const val = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+        centerCache.set(k, val);
+        return val;
+      };
+      // Read phase
+      moves.forEach(({from, to}) => { getCenter(from.r, from.c); getCenter(to.r, to.c); });
+      // Write phase
+      const MOVE_MS = computeMoveMs();
+      requestAnimationFrame(() => {
+        moves.forEach(({from, to}) => {
+          const el = nodes[from.r-1][from.c-1].querySelector('.tile');
+          if (!el) return;
+          const a = getCenter(from.r, from.c);
+          const b = getCenter(to.r, to.c);
+          const dx = b.x - a.x;
+          el.style.transition = `transform ${MOVE_MS}ms ease`;
+          el.style.transform = `translateZ(10px) translateX(${dx}px)`;
+          el.style.pointerEvents = 'none';
+        });
+      });
+      setTimeout(() => {
+        for (let r = 1; r <= ROWS; r++) {
+          const rowVals = [];
+          for (let c = 1; c <= COLS; c++) if (grid[r][c] !== 0) rowVals.push(grid[r][c]);
+          for (let c = 1; c <= COLS; c++) {
+            const val = rowVals[c-1] ?? 0;
+            grid[r][c] = val;
+          }
+        }
+        renderGrid();
+        resolve();
+      }, computeMoveMs() + 10);
+    });
+  }
+
+  function updateStats() {
+    matchesEl.textContent = String(matches);
+    remainingEl.textContent = String(remaining);
+    levelEl.textContent = String(level);
+    scoreEl.textContent = String(score);
+  }
+
+  function startTimer() {
+    clearInterval(timerHandle);
+    startTs = Date.now();
+    timeEl.textContent = '0:00';
+    timerHandle = setInterval(() => {
+      const sec = Math.floor((Date.now()-startTs)/1000);
+      timeEl.textContent = fmtTime(sec);
+    }, 1000);
+  }
+
+  function stopTimer() { clearInterval(timerHandle); timerHandle = null; }
+
+  // Pathfinding helpers
+  function isEmpty(r, c, a, b) {
+    // cell considered empty if 0 or it's one of endpoints a/b
+    const isEndpoint = (r === a[0] && c === a[1]) || (r === b[0] && c === b[1]);
+    return isEndpoint || grid[r][c] === 0;
+  }
+
+  function isClearRow(r, c1, c2, a, b) {
+    const [lo, hi] = c1 <= c2 ? [c1, c2] : [c2, c1];
+    for (let c = lo + 1; c < hi; c++) {
+      if (!isEmpty(r, c, a, b)) return false;
+    }
+    return true;
+  }
+
+  function isClearCol(c, r1, r2, a, b) {
+    const [lo, hi] = r1 <= r2 ? [r1, r2] : [r2, r1];
+    for (let r = lo + 1; r < hi; r++) {
+      if (!isEmpty(r, c, a, b)) return false;
+    }
+    return true;
+  }
+
+  function findPath(a, b) {
+    const [r1,c1] = a, [r2,c2] = b;
+    if (grid[r1][c1] === 0 || grid[r2][c2] === 0) return null;
+    if (grid[r1][c1] !== grid[r2][c2]) return null;
+
+    // 0-turn (same row/col)
+    if (r1 === r2 && isClearRow(r1, c1, c2, a, b)) {
+      return [[r1,c1],[r1,c2]];
+    }
+    if (c1 === c2 && isClearCol(c1, r1, r2, a, b)) {
+      return [[r1,c1],[r2,c1]];
+    }
+
+    // 1-turn (L shape): pivots at (r1,c2) or (r2,c1)
+    if (isEmpty(r1, c2, a, b) && isClearRow(r1, c1, c2, a, b) && isClearCol(c2, r1, r2, a, b)) {
+      return [[r1,c1],[r1,c2],[r2,c2]];
+    }
+    if (isEmpty(r2, c1, a, b) && isClearCol(c1, r1, r2, a, b) && isClearRow(r2, c1, c2, a, b)) {
+      return [[r1,c1],[r2,c1],[r2,c2]];
+    }
+
+    // 2-turn: scan rows
+    for (let r=0; r<ROWS+2; r++) {
+      if (!isEmpty(r, c1, a, b) || !isEmpty(r, c2, a, b)) continue;
+      if (!isClearCol(c1, r, r1, a, b)) continue;
+      if (!isClearRow(r, c1, c2, a, b)) continue;
+      if (!isClearCol(c2, r, r2, a, b)) continue;
+      return [[r1,c1],[r,c1],[r,c2],[r2,c2]];
+    }
+    // 2-turn: scan cols
+    for (let c=0; c<COLS+2; c++) {
+      if (!isEmpty(r1, c, a, b) || !isEmpty(r2, c, a, b)) continue;
+      if (!isClearRow(r1, c, c1, a, b)) continue;
+      if (!isClearCol(c, r1, r2, a, b)) continue;
+      if (!isClearRow(r2, c, c2, a, b)) continue;
+      return [[r1,c1],[r1,c],[r2,c],[r2,c2]];
+    }
+    return null;
+  }
+
+  // Drawing connection path as overlay segments aligned to board
+  function drawPath(points) {
+    // Position segments using actual element screen centers to match 3D transform.
+    const overlayRect = overlayEl.getBoundingClientRect();
+
+    const getCellCenter = (r, c) => {
+      // Interior cell available in nodes; boundary maps to nearest edge, offset outward
+      const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+      const isBoundary = r < 1 || r > ROWS || c < 1 || c > COLS;
+      const rr = clamp(r, 1, ROWS);
+      const cc = clamp(c, 1, COLS);
+      const cell = nodes[rr-1]?.[cc-1];
+      const rect = cell?.getBoundingClientRect();
+      if (!rect) return { x: overlayRect.left, y: overlayRect.top };
+      let x = rect.left + rect.width/2;
+      let y = rect.top + rect.height/2;
+      if (isBoundary) {
+        const offset = Math.min(rect.width, rect.height) * 0.65;
+        if (r < 1) y = rect.top - offset;          // above top row
+        if (r > ROWS) y = rect.bottom + offset;    // below bottom row
+        if (c < 1) x = rect.left - offset;         // left of first col
+        if (c > COLS) x = rect.right + offset;     // right of last col
+      }
+      return { x, y };
+    };
+
+    // Draw each segment between consecutive points
+    for (let i=0; i<points.length-1; i++) {
+      const [r1,c1] = points[i];
+      const [r2,c2] = points[i+1];
+      const a = getCellCenter(r1,c1);
+      const b = getCellCenter(r2,c2);
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy);
+      const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+      const seg = document.createElement('div');
+      seg.className = 'path-seg';
+      seg.style.width = `${len}px`;
+      seg.style.left = `${a.x - overlayRect.left}px`;
+      seg.style.top = `${a.y - overlayRect.top - 3}px`;
+      seg.style.transform = `rotate(${angle}deg)`;
+      overlayEl.appendChild(seg);
+    }
+    // Fade out quickly
+    setTimeout(() => overlayEl.innerHTML = '', 220);
+  }
+
+  // I18N
+  const I18N = {
+    th: {
+      title: 'จับคู่ไทล์ 3D', new_game: 'เริ่มใหม่', shuffle: 'สับไทล์', hint: 'คำใบ้',
+      level: 'ด่าน', score: 'คะแนน', time: 'เวลา', matches: 'จับคู่', remaining: 'คงเหลือ',
+      start_level: 'ด่านเริ่มต้น',
+      menu: 'เมนู', menu_title: 'เมนูเกม',
+      tip: 'เคล็ดลับ: เชื่อมไทล์ที่เหมือนกันโดยหักเลี้ยวได้ไม่เกิน 2 ครั้ง',
+      reset_zoom: 'รีเซ็ตการซูม',
+      tileset_label: 'ชุดไทล์', tileset_thai: 'ไทย', tileset_dino: 'ไดโนเสาร์', language_label: 'ภาษา',
+      level_cleared: (n)=>`ผ่านด่าน ${n} แล้ว!`, game_over: 'จบเกม — คะแนนเหลือ 0 เริ่มใหม่เพื่อเล่นอีกครั้ง.'
+    },
+    en: {
+      title: '3D Tile Connect', new_game: 'New Game', shuffle: 'Shuffle', hint: 'Hint',
+      level: 'Level', score: 'Score', time: 'Time', matches: 'Matches', remaining: 'Remaining',
+      start_level: 'Start level',
+      menu: 'Menu', menu_title: 'Game Menu',
+      tip: 'Tip: Connect matching tiles with up to 2 turns.',
+      reset_zoom: 'Reset Zoom',
+      tileset_label: 'Tile set', tileset_thai: 'Thai', tileset_dino: 'Dinosaur', language_label: 'Language',
+      level_cleared: (n)=>`Level ${n} cleared!`, game_over: 'Game Over — Score reached 0. New Game to retry.'
+    }
+  };
+  const lang = (getParam('lang','th') === 'en') ? 'en' : 'th';
+  function applyI18n() {
+    const dict = I18N[lang];
+    document.querySelectorAll('[data-i18n]').forEach(node => {
+      const key = node.getAttribute('data-i18n');
+      if (!key) return;
+      const val = dict[key];
+      if (typeof val === 'string') node.textContent = val;
+    });
+    // Attributes and document title
+    document.title = dict.title;
+    // reset view control removed
+    if (tilesetSelect) tilesetSelect.setAttribute('aria-label', dict.tileset_label);
+    if (langSelect) langSelect.setAttribute('aria-label', dict.language_label);
+  }
+
+  // Controls
+  newGameBtn.addEventListener('click', () => { closeMenu(); init(); });
+  shuffleBtn.addEventListener('click', doShuffle);
+  hintBtn.addEventListener('click', doHint);
+  const resetZoomBtn = document.getElementById('resetZoomBtn');
+  if (resetZoomBtn) resetZoomBtn.addEventListener('click', () => { USER_SCALE = 1; applyBoardScale(LAST_AUTO_SCALE); showToast((lang==='th'?'ซูมถูกรีเซ็ต':'Zoom reset')); });
+  // reset view control removed
+
+  // Menu dialog
+  function openMenu() { if (menuDialog) menuDialog.setAttribute('aria-hidden', 'false'); }
+  function closeMenu() { if (menuDialog) menuDialog.setAttribute('aria-hidden', 'true'); }
+  if (menuBtn) menuBtn.addEventListener('click', openMenu);
+  if (menuCloseBtn) menuCloseBtn.addEventListener('click', closeMenu);
+  // backdrop click
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (t && t instanceof HTMLElement && t.classList.contains('dialog-backdrop')) closeMenu();
+  });
+  // escape key
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+  // Dropdowns (reload with updated query)
+  if (tilesetSelect) {
+    tilesetSelect.value = currentTileSet;
+    tilesetSelect.addEventListener('change', () => {
+      const params = new URLSearchParams(location.search);
+      params.set('tileset', tilesetSelect.value);
+      location.search = params.toString();
+    });
+  }
+  if (langSelect) {
+    langSelect.value = lang;
+    langSelect.addEventListener('change', () => {
+      const params = new URLSearchParams(location.search);
+      params.set('lang', langSelect.value);
+      location.search = params.toString();
+    });
+  }
+
+  // Mid-game re-evaluation on resize (debounced)
+  let _resizeDebounce = null;
+  window.addEventListener('resize', () => {
+    if (_resizeDebounce) clearTimeout(_resizeDebounce);
+    _resizeDebounce = setTimeout(() => { reEvaluateLayout(); }, 200);
+  });
+
+  // Pinch-to-zoom and Ctrl+Wheel zoom on wrapper
+  (function setupZoomGestures(){
+    const wrapper = document.getElementById('board-wrapper');
+    if (!wrapper) return;
+    const pointers = new Map(); // id -> {x,y}
+    let pinchStartDist = 0;
+    let pinchStartUserScale = 1;
+    let isPinching = false;
+    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+    function updateZoomToast() {
+      const pct = Math.round(USER_SCALE * 100);
+      showToast((lang === 'th' ? `ซูม ${pct}%` : `Zoom ${pct}%`), 'info', 700);
+    }
+
+    wrapper.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        pinchStartDist = dist(a, b) || 1;
+        pinchStartUserScale = USER_SCALE;
+        isPinching = true;
+      }
+    });
+    wrapper.addEventListener('pointermove', (e) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (isPinching && pointers.size >= 2) {
+        const [a, b] = [...pointers.values()];
+        const d = dist(a, b) || 1;
+        const factor = d / pinchStartDist;
+        USER_SCALE = clamp(pinchStartUserScale * factor, MIN_USER_SCALE, MAX_USER_SCALE);
+        // Only update board scale; avoid tile size recompute for smoother pinch
+        applyBoardScale(LAST_AUTO_SCALE);
+        updateZoomToast();
+        e.preventDefault();
+      }
+    }, { passive: false });
+    function endPointer(e) {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2 && isPinching) {
+        // Give a brief cooldown so clicks don't fire
+        isPinching = false;
+        setTimeout(() => { /* cooldown over */ }, 120);
+      }
+    }
+    wrapper.addEventListener('pointerup', endPointer);
+    wrapper.addEventListener('pointercancel', endPointer);
+    wrapper.addEventListener('pointerleave', (e) => { if (pointers.has(e.pointerId)) endPointer(e); });
+
+    // Ctrl+wheel zoom (trackpads and desktops). Prevents default when active.
+    wrapper.addEventListener('wheel', (e) => {
+      if (!e.ctrlKey) return; // only treat pinch-zoom like events
+      e.preventDefault();
+      const delta = -e.deltaY; // up = zoom in
+      const factor = Math.exp(delta * 0.0015);
+      USER_SCALE = clamp(USER_SCALE * factor, MIN_USER_SCALE, MAX_USER_SCALE);
+      applyBoardScale(LAST_AUTO_SCALE);
+      updateZoomToast();
+    }, { passive: false });
+
+    // Guard clicks during pinch
+    boardEl.addEventListener('click', (ev) => {
+      if (isPinching) ev.stopPropagation();
+    }, true);
+
+    // Safari gesture events fallback (iOS)
+    if ('ongesturestart' in window) {
+      let base = 1;
+      wrapper.addEventListener('gesturestart', (e) => {
+        base = USER_SCALE;
+        e.preventDefault();
+      }, { passive: false });
+      wrapper.addEventListener('gesturechange', (e) => {
+        USER_SCALE = clamp(base * (e.scale || 1), MIN_USER_SCALE, MAX_USER_SCALE);
+        applyBoardScale(LAST_AUTO_SCALE);
+        e.preventDefault();
+      }, { passive: false });
+      wrapper.addEventListener('gestureend', (e) => {
+        e.preventDefault();
+      }, { passive: false });
+    }
+
+    // Double-tap to reset zoom
+    let lastTap = 0;
+    wrapper.addEventListener('touchend', (e) => {
+      const now = Date.now();
+      if (now - lastTap < 300) {
+        USER_SCALE = 1;
+        applyBoardScale(LAST_AUTO_SCALE);
+        updateZoomToast();
+        e.preventDefault();
+      }
+      lastTap = now;
+    }, { passive: false });
+  })();
+
+  function doShuffle() {
+    if (gameOver || inTransition) return;
+    // collect all symbols
+    const syms = [];
+    for (let r=1;r<=ROWS;r++) for (let c=1;c<=COLS;c++) if (grid[r][c]) syms.push(grid[r][c]);
+    shuffle(syms);
+    let i=0;
+    for (let r=1;r<=ROWS;r++) for (let c=1;c<=COLS;c++) if (grid[r][c]) grid[r][c] = syms[i++];
+    renderGrid();
+    clearSelection();
+    adjustScore(-PENALTY_SHUFFLE);
+  }
+
+  function doHint() {
+    if (gameOver || inTransition) return;
+    const pair = findAnyMatch();
+    if (!pair) return;
+    const [[r1,c1],[r2,c2]] = pair;
+    const t1 = nodes[r1-1][c1-1].querySelector('.tile');
+    const t2 = nodes[r2-1][c2-1].querySelector('.tile');
+    t1?.classList.add('selected');
+    t2?.classList.add('selected');
+    setTimeout(() => { t1?.classList.remove('selected'); t2?.classList.remove('selected'); }, 500);
+  }
+
+  function findAnyMatch() {
+    // Scan for any connectable pair by symbol
+    const posBySym = new Map();
+    for (let r=1;r<=ROWS;r++) {
+      for (let c=1;c<=COLS;c++) {
+        const sym = grid[r][c];
+        if (!sym) continue;
+        if (!posBySym.has(sym)) posBySym.set(sym, []);
+        posBySym.get(sym).push([r,c]);
+      }
+    }
+    for (const [sym, list] of posBySym) {
+      for (let i=0;i<list.length;i++) for (let j=i+1;j<list.length;j++) {
+        const a = list[i], b = list[j];
+        const path = findPath(a, b);
+        if (path) return [a,b];
+      }
+    }
+    return null;
+  }
+
+  function checkWin() {
+    if (remaining === 0) {
+      stopTimer();
+      inTransition = true;
+      showToast(I18N[lang].level_cleared(level), 'good');
+      playVictory(() => { inTransition = false; nextLevel(); });
+    }
+  }
+
+  // Manual rotate disabled: board uses fixed tilt only.
+
+  function init() {
+    // New Game resets level and score
+    const startLv = parseInt(startLevelInput?.value || '1', 10);
+    level = Number.isFinite(startLv) && startLv >= 1 ? startLv : 1;
+    score = START_SCORE;
+    gameOver = false;
+    inTransition = false;
+    document.body.classList.remove('victory','defeat');
+    fxEl && (fxEl.innerHTML = '');
+    const s = sizeForLevel(level);
+    ROWS = s.rows; COLS = s.cols;
+    setBoardDims(ROWS, COLS);
+    applyI18n();
+    applyBackground(currentTileSet);
+    adjustTileScale();
+    // fixed tilt; no manual reset
+    createGrid();
+    renderGrid();
+    clearSelection();
+    updateStats();
+    startTimer();
+  }
+
+  // resetView removed (fixed tilt)
+
+  function nextLevel() {
+    level += 1;
+    const s = sizeForLevel(level);
+    ROWS = s.rows; COLS = s.cols;
+    setBoardDims(ROWS, COLS);
+    // Regenerate icons if desired (kept same size for performance)
+    adjustTileScale();
+    updatePerfMode();
+    // fixed tilt; no manual reset
+    createGrid();
+    renderGrid();
+    clearSelection();
+    updateStats();
+    startTimer();
+  }
+
+  // Re-evaluate orientation caps mid-game and adapt board for current level.
+  function reEvaluateLayout() {
+    const s = sizeForLevel(level);
+    const changed = (s.rows !== ROWS) || (s.cols !== COLS);
+    ROWS = s.rows; COLS = s.cols;
+    setBoardDims(ROWS, COLS);
+    adjustTileScale();
+    if (changed) {
+      // Regenerate current level grid to fit new dimensions; keep level, score, and timer.
+      createGrid();
+      renderGrid();
+      clearSelection();
+      updateStats();
+    }
+    updatePerfMode();
+  }
+
+  function adjustScore(delta) {
+    score += delta;
+    if (score < 0) score = 0;
+    updateStats();
+    if (score === 0) {
+      onLose();
+    }
+  }
+
+  function onLose() {
+    if (gameOver) return;
+    gameOver = true;
+    stopTimer();
+    playDefeat();
+    showToast(I18N[lang].game_over, 'danger', 2500);
+  }
+
+  function showToast(msg, kind = 'info', ms = 1200) {
+    if (!toastEl) return;
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    // Color hint via gradient edge
+    const color = kind === 'good' ? 'var(--good)' : kind === 'danger' ? 'var(--danger)' : kind === 'accent';
+    toastEl.style.boxShadow = `0 8px 18px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.12), 0 0 0 2px ${color}`;
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(()=> { toastEl.classList.remove('show'); }, ms);
+  }
+
+  // bootstrap
+  // Resize handling to keep tiles fitting wrapper; also observe wrapper size
+  window.addEventListener('resize', () => { adjustTileScale(); });
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(() => adjustTileScale());
+    ro.observe(document.getElementById('board-wrapper'));
+  }
+  init();
+
+  // Animations helpers
+  function animateOnce(el, cls, ms) {
+    if (!el) return;
+    el.classList.add(cls);
+    setTimeout(() => el.classList.remove(cls), ms || 250);
+  }
+
+  function playVictory(done) {
+    document.body.classList.add('victory');
+    // Confetti burst
+    spawnConfetti(80, 1400);
+    setTimeout(() => {
+      document.body.classList.remove('victory');
+      done && done();
+    }, 1100);
+  }
+
+  function playDefeat() {
+    document.body.classList.add('defeat');
+    // Clear after a short period; keep class until new game for visual feedback
+    setTimeout(() => {}, 800);
+  }
+
+  function spawnConfetti(count, duration) {
+    if (!fxEl) return;
+    fxEl.innerHTML = '';
+    const colors = ['#ff6b6b','#ffd93d','#6bd6ff','#9f7bff','#57e39f'];
+    const tilesCount = ROWS * COLS;
+    const perf = document.body.classList.contains('perf') || prefersReducedMotion();
+    const base = Math.max(20, Math.min(count, Math.floor(count * (600 / Math.max(600, tilesCount)))));
+    const scaledCount = perf ? Math.floor(base * 0.5) : base;
+    for (let i=0;i<scaledCount;i++) {
+      const d = document.createElement('div');
+      d.className = 'confetti';
+      const left = Math.random()*100;
+      const delay = Math.random()*0.2;
+      const dur = perf ? Math.max(0.8, 0.8 * (duration/1000)) : (duration/1000);
+      const time = (0.9 + Math.random()*0.6) * dur;
+      const color = colors[i % colors.length];
+      d.style.left = left + '%';
+      d.style.top = (-10 - Math.random()*20) + 'px';
+      d.style.background = color;
+      d.style.animationDuration = time + 's';
+      d.style.animationDelay = delay + 's';
+      fxEl.appendChild(d);
+    }
+    const endDur = (document.body.classList.contains('perf') ? Math.floor(duration * 0.8) : duration) + 400;
+    setTimeout(() => { fxEl.innerHTML = ''; }, endDur);
+  }
+
+  function updatePerfMode() {
+    const tiles = ROWS * COLS;
+    const lowCore = (navigator.hardwareConcurrency || 4) <= 4;
+    const reduce = prefersReducedMotion();
+    if (tiles >= 800 || lowCore || reduce) document.body.classList.add('perf'); else document.body.classList.remove('perf');
+  }
+
+  function applyBackground(theme) {
+    const key = theme || 'thai';
+    const png = `assets/backgrounds_png/${key}.png`;
+    const svg = `assets/backgrounds/${key}.svg`;
+    if (!pageBgEl) return;
+    pageBgEl.style.backgroundImage = `url('${png}')`;
+    const test = new Image();
+    test.onerror = () => { pageBgEl.style.backgroundImage = `url('${svg}')`; };
+    test.src = png;
+  }
+})();

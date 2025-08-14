@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f1221" />
+    <title>3D Tile Connect</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="page-bg" aria-hidden="true"></div>
+    <div id="app">
+      <header class="topbar">
+        <h1 id="title" data-i18n="title">จับคู่ไทล์ 3D</h1>
+        <div class="controls">
+          <button id="menuBtn" class="btn" data-i18n="menu">Menu</button>
+        </div>
+        <div class="stats">
+          <span><span data-i18n="level">ด่าน</span>: <strong id="level">1</strong></span>
+          <span><span data-i18n="score">คะแนน</span>: <strong id="score">0</strong></span>
+          <span><span data-i18n="time">เวลา</span>: <strong id="time">0:00</strong></span>
+          <span><span data-i18n="matches">จับคู่</span>: <strong id="matches">0</strong></span>
+          <span><span data-i18n="remaining">คงเหลือ</span>: <strong id="remaining">0</strong></span>
+        </div>
+      </header>
+
+      <main class="game-area">
+        <div id="board-wrapper">
+          <div id="board" class="board" aria-label="Tile board" role="grid"></div>
+          <div id="overlay" class="overlay"></div>
+          <div id="fx" class="fx" aria-hidden="true"></div>
+          <div id="toast" class="toast" aria-live="polite"></div>
+          <div class="ingame-controls" aria-hidden="false">
+            <button id="shuffleBtn" class="btn fab" data-i18n="shuffle" title="Shuffle">สับไทล์</button>
+            <button id="hintBtn" class="btn fab" data-i18n="hint" title="Hint">คำใบ้</button>
+          </div>
+        </div>
+      </main>
+
+      <!-- Modal Game Menu Dialog -->
+      <div id="menuDialog" class="dialog" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
+        <div class="dialog-backdrop" data-close="menu"></div>
+        <div class="dialog-content">
+          <header class="dialog-header">
+            <h2 id="menuTitle" data-i18n="menu_title">Game Menu</h2>
+            <button id="menuCloseBtn" class="btn btn-ghost" aria-label="Close">×</button>
+          </header>
+          <div class="dialog-body">
+            <div class="dialog-row">
+              <button id="newGameBtn" class="btn" data-i18n="new_game">เริ่มใหม่</button>
+            </div>
+            <div class="dialog-row">
+              <label class="ctrl-group">
+                <span data-i18n="start_level">Start level</span>
+                <input id="startLevelInput" class="sel" type="number" min="1" step="1" value="1" aria-label="Start level" />
+              </label>
+            </div>
+            <div class="dialog-row">
+              <label class="ctrl-group">
+                <span data-i18n="tileset_label">ชุดไทล์</span>
+                <select id="tilesetSelect" class="sel" aria-label="Tile set">
+                  <option value="thai" data-i18n="tileset_thai">ไทย</option>
+                  <option value="dinosaur" data-i18n="tileset_dino">ไดโนเสาร์</option>
+                </select>
+              </label>
+              <label class="ctrl-group">
+                <span data-i18n="language_label">ภาษา</span>
+                <select id="langSelect" class="sel" aria-label="Language">
+                  <option value="th">ไทย</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+            </div>
+            <div class="dialog-row">
+              <button id="resetZoomBtn" class="btn" data-i18n="reset_zoom">Reset Zoom</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <footer class="bottombar">
+        <div class="help" data-i18n="tip">เคล็ดลับ: เชื่อมไทล์ที่เหมือนกันโดยหักเลี้ยวได้ไม่เกิน 2 ครั้ง ลากเพื่อหมุนมุมมอง</div>
+      </footer>
+    </div>
+
+    <script src="main.js"></script>
+  </body>
+  </html>
