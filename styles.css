@@ -265,10 +265,20 @@ input[type="number"].sel { -moz-appearance: textfield; }
 .dialog-header h2 { margin: 0; font-size: 18px; letter-spacing: 0.2px; }
 .dialog-body { padding: 16px; display: grid; gap: 14px; }
 .dialog-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.dialog-row.actions { justify-content: flex-end; }
 .btn.btn-ghost {
   background: transparent;
   border: 1px solid rgba(255,255,255,0.12);
   height: 32px; width: 32px; padding: 0; border-radius: 8px;
+}
+.btn.btn-secondary {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.14);
+  color: var(--muted);
+}
+.btn.btn-secondary:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
 }
 .dialog-content #newGameBtn.btn {
   display: inline-flex;

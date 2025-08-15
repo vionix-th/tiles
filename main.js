@@ -656,7 +656,8 @@
       tip: 'เคล็ดลับ: เชื่อมไทล์ที่เหมือนกันโดยหักเลี้ยวได้ไม่เกิน 2 ครั้ง',
       tileset_label: 'ชุดไทล์', tileset_thai: 'ไทย', tileset_dino: 'ไดโนเสาร์', language_label: 'ภาษา',
       level_cleared: (n)=>`ผ่านด่าน ${n} แล้ว!`, game_over: 'จบเกม — คะแนนเหลือ 0 เริ่มใหม่เพื่อเล่นอีกครั้ง.',
-      auto_shuffle: 'ไม่มีทางเดิน — สับไทล์อัตโนมัติ'
+      auto_shuffle: 'ไม่มีทางเดิน — สับไทล์อัตโนมัติ',
+      close: 'ปิด'
     },
     en: {
       title: '3D Tile Connect', new_game: 'New Game', shuffle: 'Shuffle', hint: 'Hint',
@@ -666,7 +667,8 @@
       tip: 'Tip: Connect matching tiles with up to 2 turns.',
       tileset_label: 'Tile set', tileset_thai: 'Thai', tileset_dino: 'Dinosaur', language_label: 'Language',
       level_cleared: (n)=>`Level ${n} cleared!`, game_over: 'Game Over — Score reached 0. New Game to retry.',
-      auto_shuffle: 'No moves — auto-shuffled'
+      auto_shuffle: 'No moves — auto-shuffled',
+      close: 'Close'
     }
   };
   const lang = (getParam('lang','th') === 'en') ? 'en' : 'th';
@@ -711,6 +713,8 @@
   function closeMenu() { if (menuDialog) menuDialog.setAttribute('aria-hidden', 'true'); }
   if (menuBtn) menuBtn.addEventListener('click', openMenu);
   if (menuCloseBtn) menuCloseBtn.addEventListener('click', closeMenu);
+  const menuCloseTextBtn = document.getElementById('menuCloseTextBtn');
+  if (menuCloseTextBtn) menuCloseTextBtn.addEventListener('click', closeMenu);
   // backdrop click
   document.addEventListener('click', (e) => {
     const t = e.target;
