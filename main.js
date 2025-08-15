@@ -712,51 +712,9 @@
     return null;
   }
 
-  // Drawing connection path as overlay segments aligned to board
+  // Drawing connection path disabled per design. Keep as no-op for simplicity.
   function drawPath(points) {
-    // Position segments using actual element screen centers to match 3D transform.
-    const overlayRect = overlayEl.getBoundingClientRect();
-
-    const getCellCenter = (r, c) => {
-      // Interior cell available in nodes; boundary maps to nearest edge, offset outward
-      const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-      const isBoundary = r < 1 || r > ROWS || c < 1 || c > COLS;
-      const rr = clamp(r, 1, ROWS);
-      const cc = clamp(c, 1, COLS);
-      const cell = nodes[rr-1]?.[cc-1];
-      const rect = cell?.getBoundingClientRect();
-      if (!rect) return { x: overlayRect.left, y: overlayRect.top };
-      let x = rect.left + rect.width/2;
-      let y = rect.top + rect.height/2;
-      if (isBoundary) {
-        const offset = Math.min(rect.width, rect.height) * 0.65;
-        if (r < 1) y = rect.top - offset;          // above top row
-        if (r > ROWS) y = rect.bottom + offset;    // below bottom row
-        if (c < 1) x = rect.left - offset;         // left of first col
-        if (c > COLS) x = rect.right + offset;     // right of last col
-      }
-      return { x, y };
-    };
-
-    // Draw each segment between consecutive points
-    for (let i=0; i<points.length-1; i++) {
-      const [r1,c1] = points[i];
-      const [r2,c2] = points[i+1];
-      const a = getCellCenter(r1,c1);
-      const b = getCellCenter(r2,c2);
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const len = Math.hypot(dx, dy);
-      const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-      const seg = document.createElement('div');
-      seg.className = 'path-seg';
-      seg.style.width = `${len}px`;
-      seg.style.left = `${a.x - overlayRect.left}px`;
-      seg.style.top = `${a.y - overlayRect.top - 3}px`;
-      seg.style.transform = `rotate(${angle}deg)`;
-      overlayEl.appendChild(seg);
-    }
-    // Fade out quickly
-    setTimeout(() => overlayEl.innerHTML = '', 220);
+    if (overlayEl) overlayEl.innerHTML = '';
   }
 
   // I18N
