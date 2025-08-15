@@ -252,6 +252,15 @@ input[type="number"].sel { -moz-appearance: textfield; }
   justify-content: space-between;
   padding: 14px 16px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
+  position: relative;
+}
+.dialog-header::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  opacity: 0.9;
 }
 .dialog-header h2 { margin: 0; font-size: 18px; letter-spacing: 0.2px; }
 .dialog-body { padding: 16px; display: grid; gap: 14px; }
@@ -260,6 +269,22 @@ input[type="number"].sel { -moz-appearance: textfield; }
   background: transparent;
   border: 1px solid rgba(255,255,255,0.12);
   height: 32px; width: 32px; padding: 0; border-radius: 8px;
+}
+.dialog-content #newGameBtn.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 42px;
+  line-height: 42px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  background: linear-gradient(180deg, #4db3ff, #2a6ed1);
+  border-color: rgba(255,255,255,0.2);
+  box-shadow: 0 12px 22px rgba(42,110,209,0.35);
+}
+.dialog-content #newGameBtn.btn:hover {
+  box-shadow: 0 16px 28px rgba(42,110,209,0.45);
 }
 .dialog .btn { height: 34px; }
 .dialog .sel, .dialog input.sel { height: 34px; line-height: 34px; }
