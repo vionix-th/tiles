@@ -282,6 +282,7 @@ input[type="number"].sel { -moz-appearance: textfield; }
     inset 0 -2px 0 rgba(0,0,0,0.05);
   transform: translateZ(10px);
   transition: transform 150ms ease, box-shadow 150ms ease, filter 150ms ease, opacity 200ms ease;
+  will-change: transform, opacity;
 }
 .tile img {
   display: block;
@@ -481,3 +482,5 @@ input[type="number"].sel { -moz-appearance: textfield; }
   filter: none;
   transition: transform 150ms ease, opacity 160ms ease;
 }
+.moving .tile img { filter: none; }
+.moving .path-seg { box-shadow: none; opacity: 0.75; }

@@ -85,11 +85,11 @@
   }
   function computeMoveMs() {
     const tiles = ROWS * COLS;
-    let ms = 220;
-    if (tiles >= 1600) ms = 150; // 40x40+
-    else if (tiles >= 800) ms = 180; // ~28x28+
-    if (prefersReducedMotion()) ms -= 40;
-    return Math.max(130, ms);
+    let ms = 180;
+    if (tiles >= 1600) ms = 110; // very large boards
+    else if (tiles >= 800) ms = 140; // large boards
+    if (prefersReducedMotion()) ms -= 50;
+    return Math.max(90, ms);
   }
 
   // Utils
