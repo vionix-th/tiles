@@ -174,12 +174,7 @@ input[type="number"].sel { -moz-appearance: textfield; }
   will-change: transform;
 }
 
-.overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  transform-style: preserve-3d;
-}
+/* overlay layer removed */
 
 .toast {
   position: absolute;
@@ -330,17 +325,7 @@ input[type="number"].sel { -moz-appearance: textfield; }
 .tile.anim-fail { animation: fail-shake 280ms ease; box-shadow: 0 0 0 3px rgba(255,107,107,0.7) inset, 0 16px 24px rgba(0,0,0,0.35); }
 .tile.anim-success { animation: success-pop 240ms ease; box-shadow: 0 0 0 3px rgba(87,227,159,0.7) inset, 0 18px 26px rgba(0,0,0,0.35); }
 
-/* Connection path lines */
-.path-seg {
-  position: absolute;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
-  border-radius: 999px;
-  transform-origin: left center;
-  height: 6px;
-  will-change: transform, opacity;
-  opacity: 0.9;
-}
+/* Connection path removed */
 
 /* FX overlay and screen-wide effects */
 .fx {

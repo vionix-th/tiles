@@ -1,7 +1,6 @@
 /* 3D Tile Connect - Vanilla JS */
 (function () {
   const boardEl = document.getElementById('board');
-  const overlayEl = document.getElementById('overlay');
   const timeEl = document.getElementById('time');
   const matchesEl = document.getElementById('matches');
   const remainingEl = document.getElementById('remaining');
@@ -335,7 +334,6 @@
 
   function renderGrid() {
     boardEl.innerHTML = '';
-    overlayEl.innerHTML = '';
     setBoardDims(ROWS, COLS);
     nodes = Array.from({length: ROWS}, () => Array.from({length: COLS}, () => null));
 
@@ -352,6 +350,7 @@
           tile.className = 'tile';
           tile.dataset.type = grid[r][c];
           tile.setAttribute('aria-label', `Tile ${grid[r][c]}`);
+          cell.removeAttribute('aria-hidden');
           const img = document.createElement('img');
           img.alt = grid[r][c];
           img.draggable = false;
@@ -363,6 +362,8 @@
           };
           tile.appendChild(img);
           cell.appendChild(tile);
+        } else {
+          cell.setAttribute('aria-hidden', 'true');
         }
         nodes[r-1][c-1] = cell;
         frag.appendChild(cell);
@@ -408,7 +409,6 @@
 
     const path = findPath([selected.r, selected.c], [r, c]);
     if (path) {
-      drawPath(path);
       animateOnce(tileEl, 'anim-success', 240);
       animateOnce(selected.el, 'anim-success', 240);
       SFX.play('match');
@@ -465,8 +465,8 @@
     if (n2) n2.classList.add('matched');
     // remove from DOM shortly after animation
     setTimeout(() => {
-      if (n1?.parentElement) n1.parentElement.innerHTML = '';
-      if (n2?.parentElement) n2.parentElement.innerHTML = '';
+      if (n1?.parentElement) { n1.parentElement.innerHTML = ''; n1.parentElement.setAttribute('aria-hidden','true'); }
+      if (n2?.parentElement) { n2.parentElement.innerHTML = ''; n2.parentElement.setAttribute('aria-hidden','true'); }
     }, 320);
   }
 
@@ -554,10 +554,7 @@
     return null;
   }
 
-  // Drawing connection path disabled per design. Keep as no-op for simplicity.
-  function drawPath(points) {
-    if (overlayEl) overlayEl.innerHTML = '';
-  }
+  // Connection path drawing removed
 
   // I18N
   const I18N = {
