@@ -473,3 +473,11 @@ input[type="number"].sel { -moz-appearance: textfield; }
 .perf .confetti { width: 8px; height: 10px; }
 
 /* Drag rotate removed; no dragging state needed */
+
+/* During tile shifting animations, simplify visuals for performance */
+.moving .board { pointer-events: none; }
+.moving .tile {
+  box-shadow: none;
+  filter: none;
+  transition: transform 150ms ease, opacity 160ms ease;
+}

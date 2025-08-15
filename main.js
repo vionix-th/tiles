@@ -453,9 +453,10 @@
       clearSelection();
       // After removal animation, apply gravity, then horizontal compaction, then check for win
       inTransition = true;
+      document.body.classList.add('moving');
       applyGravity()
         .then(() => applyHorizontalCompaction())
-        .then(() => { inTransition = false; checkWin(); });
+        .then(() => { document.body.classList.remove('moving'); inTransition = false; checkWin(); });
     } else {
       // Not connectable within 2 turns
       pulse(tileEl, 'warn');
@@ -551,7 +552,7 @@
           const b = getCenter(to.r, to.c);
           const dy = b.y - a.y;
           el.style.transition = `transform ${MOVE_MS}ms ease`;
-          el.style.transform = `translateZ(10px) translateY(${dy}px)`;
+          el.style.transform = `translate3d(0, ${dy}px, 10px)`;
           el.style.pointerEvents = 'none';
         });
       });
@@ -567,7 +568,7 @@
         }
         renderGrid();
         resolve();
-      }, computeMoveMs() + 10);
+      }, MOVE_MS + 12);
     });
   }
 
@@ -610,7 +611,7 @@
           const b = getCenter(to.r, to.c);
           const dx = b.x - a.x;
           el.style.transition = `transform ${MOVE_MS}ms ease`;
-          el.style.transform = `translateZ(10px) translateX(${dx}px)`;
+          el.style.transform = `translate3d(${dx}px, 0, 10px)`;
           el.style.pointerEvents = 'none';
         });
       });
@@ -625,7 +626,7 @@
         }
         renderGrid();
         resolve();
-      }, computeMoveMs() + 10);
+      }, MOVE_MS + 12);
     });
   }
 
