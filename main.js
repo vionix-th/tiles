@@ -68,6 +68,14 @@
   function prefersReducedMotion() {
     return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
+  function computeMoveMs() {
+    const tiles = ROWS * COLS;
+    let ms = 180;
+    if (tiles >= 1600) ms = 110; // very large boards
+    else if (tiles >= 800) ms = 140; // large boards
+    if (prefersReducedMotion()) ms -= 50;
+    return Math.max(90, ms);
+  }
 
   // Utils
   const rand = (n) => Math.floor(Math.random()*n);
@@ -408,13 +416,10 @@
       remaining -= 2;
       updateStats();
       clearSelection();
-      // After removal, apply vertical gravity then horizontal compaction; then ensure solvable and check win
+      // After removal, animate directly to final positions (gravity + compaction in one pass)
       setTimeout(() => {
-        applyGravityInPlace();
-        applyHorizontalCompactionInPlace();
-        renderGrid();
-        ensureSolvableIfLocked();
-        checkWin();
+        inTransition = true;
+        animateShiftToFinal().then(() => { inTransition = false; ensureSolvableIfLocked(); checkWin(); });
       }, 340);
     } else {
       // Not connectable within 2 turns
@@ -466,7 +471,67 @@
     }, 320);
   }
 
-  // Tile shifting (gravity/compaction)
+  // Compute final mapping after gravity and horizontal compaction, then animate in one pass
+  function animateShiftToFinal() {
+    if (prefersReducedMotion()) {
+      applyGravityInPlace();
+      applyHorizontalCompactionInPlace();
+      renderGrid();
+      return Promise.resolve();
+    }
+    const mapping = computeFinalMapping();
+    const moves = mapping.filter(m => m.destR !== m.src.r || m.destC !== m.src.c);
+    if (moves.length === 0) return Promise.resolve();
+    // Determine step sizes from CSS variables (tile-size + gap)
+    const cs = getComputedStyle(document.documentElement);
+    const tileSize = parseFloat(cs.getPropertyValue('--tile-size')) || 64;
+    const gap = parseFloat(cs.getPropertyValue('--tile-gap')) || 10;
+    const stepX = tileSize + gap;
+    const stepY = tileSize + gap;
+    const MOVE_MS = computeMoveMs();
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        moves.forEach(m => {
+          const el = nodes[m.src.r-1]?.[m.src.c-1]?.querySelector('.tile');
+          if (!el) return;
+          const dx = (m.destC - m.src.c) * stepX;
+          const dy = (m.destR - m.src.r) * stepY;
+          el.style.transition = `transform ${MOVE_MS}ms ease`;
+          el.style.transform = `translate3d(${dx}px, ${dy}px, 10px)`;
+          el.style.pointerEvents = 'none';
+        });
+      });
+      setTimeout(() => {
+        // Build final grid from mapping
+        const newGrid = Array.from({length: ROWS+2}, () => Array.from({length: COLS+2}, () => 0));
+        mapping.forEach(m => { newGrid[m.destR][m.destC] = grid[m.src.r][m.src.c]; });
+        grid = newGrid;
+        renderGrid();
+        resolve();
+      }, MOVE_MS + 20);
+    });
+  }
+
+  function computeFinalMapping() {
+    // Collect all current tiles
+    const items = [];
+    for (let r=1; r<=ROWS; r++) for (let c=1; c<=COLS; c++) if (grid[r][c] !== 0) items.push({ r, c });
+    // Apply gravity mapping per column (bottom fill)
+    const afterGrav = [];
+    for (let c=1; c<=COLS; c++) {
+      const col = items.filter(it => it.c === c).sort((a,b)=> b.r - a.r);
+      let write = ROWS;
+      for (const it of col) { afterGrav.push({ src: it, r: write, c }); write--; }
+    }
+    // Apply horizontal compaction per row (left fill)
+    const mapping = [];
+    for (let r=1; r<=ROWS; r++) {
+      const row = afterGrav.filter(it => it.r === r).sort((a,b)=> a.c - b.c);
+      let write = 1;
+      for (const it of row) { mapping.push({ src: it.src, destR: r, destC: write }); write++; }
+    }
+    return mapping;
+  }
   function applyGravityInPlace() {
     for (let c = 1; c <= COLS; c++) {
       let write = ROWS;
