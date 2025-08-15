@@ -16,6 +16,7 @@
   const menuBtn = document.getElementById('menuBtn');
   const menuDialog = document.getElementById('menuDialog');
   const menuCloseBtn = document.getElementById('menuCloseBtn');
+  const soundBtn = document.getElementById('soundBtn');
   const toastEl = document.getElementById('toast');
   const fxEl = document.getElementById('fx');
   const pageBgEl = document.getElementById('page-bg');
@@ -107,6 +108,82 @@
     document.documentElement.style.setProperty('--rows', r);
     document.documentElement.style.setProperty('--cols', c);
   }
+
+  // Simple SFX (Web Audio)
+  const SFX = (() => {
+    let ctx = null;
+    let enabled = true;
+    const saved = localStorage.getItem('sound');
+    if (saved === 'off') enabled = false;
+
+    function ensureCtx() {
+      if (ctx || !enabled) return ctx;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+      return ctx;
+    }
+    function now() { return (ctx ? ctx.currentTime : 0); }
+    function env(g, t0, a=0.005, d=0.12) {
+      g.gain.cancelScheduledValues(t0);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(g._level || 0.12, t0 + a);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + a + d);
+    }
+    function beep(freq=440, dur=0.12, type='sine', level=0.12, detune=0) {
+      if (!enabled || !ensureCtx()) return;
+      const t0 = now();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type; o.frequency.value = freq; o.detune.value = detune;
+      g._level = level;
+      o.connect(g); g.connect(ctx.destination);
+      env(g, t0, 0.004, dur);
+      o.start(t0);
+      o.stop(t0 + dur + 0.02);
+    }
+    function sweep(f1, f2, dur=0.24, type='sine', level=0.12) {
+      if (!enabled || !ensureCtx()) return;
+      const t0 = now();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type; o.frequency.setValueAtTime(f1, t0); o.frequency.linearRampToValueAtTime(f2, t0 + dur);
+      g._level = level; o.connect(g); g.connect(ctx.destination);
+      env(g, t0, 0.006, dur * 0.9);
+      o.start(t0); o.stop(t0 + dur + 0.03);
+    }
+    function chord(freqs=[440,550,660], dur=0.18, type='sine', level=0.09) {
+      if (!enabled || !ensureCtx()) return;
+      const t0 = now();
+      const master = ctx.createGain(); master.gain.value = 1; master.connect(ctx.destination);
+      freqs.forEach((f, i) => {
+        const o = ctx.createOscillator(); const g = ctx.createGain();
+        o.type = type; o.frequency.value = f;
+        g._level = level; o.connect(g); g.connect(master);
+        const d = 0.004 + i*0.006; env(g, t0, d, dur*0.9);
+        o.start(t0); o.stop(t0 + dur + 0.04);
+      });
+    }
+    function play(name) {
+      if (!enabled) return;
+      switch (name) {
+        case 'click': beep(700, 0.05, 'triangle', 0.06); break;
+        case 'match': beep(660, 0.08, 'triangle', 0.08); setTimeout(()=>beep(880, 0.1, 'sine', 0.08), 70); break;
+        case 'fail': sweep(300, 180, 0.16, 'sawtooth', 0.06); break;
+        case 'shuffle': sweep(240, 420, 0.12, 'triangle', 0.06); sweep(420, 220, 0.18, 'sine', 0.05); break;
+        case 'hint': beep(1200, 0.06, 'sine', 0.07); break;
+        case 'victory': chord([523.25, 659.25, 783.99], 0.22, 'triangle', 0.08); setTimeout(()=>chord([659.25, 783.99, 987.77], 0.22, 'triangle', 0.07), 180); break;
+        case 'defeat': sweep(320, 120, 0.4, 'sawtooth', 0.05); break;
+      }
+    }
+    function setEnabled(v) {
+      enabled = !!v;
+      localStorage.setItem('sound', enabled ? 'on' : 'off');
+      if (enabled) ensureCtx();
+    }
+    function toggle() { setEnabled(!enabled); return enabled; }
+    return { play, toggle, setEnabled, get enabled(){ return enabled; }, ensureCtx };
+  })();
 
   function sizeForLevel(lvl) {
     // Aspect-aware sizing: choose rows/cols from target area to fit wrapper ratio.
@@ -341,6 +418,7 @@
       selected = { r, c, type, el: tileEl };
       tileEl.classList.add('selected');
       dimNonMatching(type);
+      SFX.play('click');
       return;
     }
 
@@ -355,6 +433,7 @@
       pulse(selected.el, 'danger');
       animateOnce(tileEl, 'anim-fail', 280);
       animateOnce(selected.el, 'anim-fail', 280);
+      SFX.play('fail');
       adjustScore(-PENALTY_FAIL);
       clearSelection();
       return;
@@ -365,6 +444,7 @@
       drawPath(path);
       animateOnce(tileEl, 'anim-success', 240);
       animateOnce(selected.el, 'anim-success', 240);
+      SFX.play('match');
       removeTiles([selected.r, selected.c], [r, c]);
       matches++;
       adjustScore(SCORE_PER_MATCH);
@@ -715,6 +795,9 @@
     // reset view control removed
     if (tilesetSelect) tilesetSelect.setAttribute('aria-label', dict.tileset_label);
     if (langSelect) langSelect.setAttribute('aria-label', dict.language_label);
+    if (soundBtn) {
+      soundBtn.title = SFX.enabled ? (lang==='th'?'เปิดเสียง':'Sound on') : (lang==='th'?'ปิดเสียง':'Sound off');
+    }
   }
 
   // Controls
@@ -724,6 +807,18 @@
   const resetZoomBtn = document.getElementById('resetZoomBtn');
   if (resetZoomBtn) resetZoomBtn.addEventListener('click', () => { USER_SCALE = 1; applyBoardScale(LAST_AUTO_SCALE); showToast((lang==='th'?'ซูมถูกรีเซ็ต':'Zoom reset')); });
   // reset view control removed
+  if (soundBtn) {
+    const applyIcon = () => {
+      soundBtn.textContent = SFX.enabled ? '🔊' : '🔇';
+      soundBtn.setAttribute('aria-pressed', String(SFX.enabled));
+      soundBtn.title = SFX.enabled ? (lang==='th'?'เปิดเสียง':'Sound on') : (lang==='th'?'ปิดเสียง':'Sound off');
+    };
+    applyIcon();
+    soundBtn.addEventListener('click', () => { SFX.toggle(); applyIcon(); });
+    ['pointerdown','keydown','touchstart'].forEach(evt => {
+      window.addEventListener(evt, () => { if (SFX.enabled) SFX.ensureCtx(); }, { once: true, passive: true });
+    });
+  }
 
   // Menu dialog
   function openMenu() { if (menuDialog) menuDialog.setAttribute('aria-hidden', 'false'); }
@@ -871,6 +966,7 @@
     for (let r=1;r<=ROWS;r++) for (let c=1;c<=COLS;c++) if (grid[r][c]) grid[r][c] = syms[i++];
     renderGrid();
     clearSelection();
+    SFX.play('shuffle');
     adjustScore(-PENALTY_SHUFFLE);
   }
 
@@ -878,6 +974,7 @@
     if (gameOver || inTransition) return;
     const pair = findAnyMatch();
     if (!pair) return;
+    SFX.play('hint');
     const [[r1,c1],[r2,c2]] = pair;
     const t1 = nodes[r1-1][c1-1].querySelector('.tile');
     const t2 = nodes[r2-1][c2-1].querySelector('.tile');
@@ -912,6 +1009,7 @@
       stopTimer();
       inTransition = true;
       showToast(I18N[lang].level_cleared(level), 'good');
+      SFX.play('victory');
       playVictory(() => { inTransition = false; nextLevel(); });
     }
   }
@@ -990,6 +1088,7 @@
     gameOver = true;
     stopTimer();
     playDefeat();
+    SFX.play('defeat');
     showToast(I18N[lang].game_over, 'danger', 2500);
   }
 
