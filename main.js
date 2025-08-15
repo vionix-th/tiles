@@ -554,7 +554,6 @@
       start_level: 'ด่านเริ่มต้น',
       menu: 'เมนู', menu_title: 'เมนูเกม',
       tip: 'เคล็ดลับ: เชื่อมไทล์ที่เหมือนกันโดยหักเลี้ยวได้ไม่เกิน 2 ครั้ง',
-      reset_zoom: 'รีเซ็ตการซูม',
       tileset_label: 'ชุดไทล์', tileset_thai: 'ไทย', tileset_dino: 'ไดโนเสาร์', language_label: 'ภาษา',
       level_cleared: (n)=>`ผ่านด่าน ${n} แล้ว!`, game_over: 'จบเกม — คะแนนเหลือ 0 เริ่มใหม่เพื่อเล่นอีกครั้ง.',
       auto_shuffle: 'ไม่มีทางเดิน — สับไทล์อัตโนมัติ'
@@ -565,7 +564,6 @@
       start_level: 'Start level',
       menu: 'Menu', menu_title: 'Game Menu',
       tip: 'Tip: Connect matching tiles with up to 2 turns.',
-      reset_zoom: 'Reset Zoom',
       tileset_label: 'Tile set', tileset_thai: 'Thai', tileset_dino: 'Dinosaur', language_label: 'Language',
       level_cleared: (n)=>`Level ${n} cleared!`, game_over: 'Game Over — Score reached 0. New Game to retry.',
       auto_shuffle: 'No moves — auto-shuffled'
