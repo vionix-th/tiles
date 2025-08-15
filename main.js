@@ -456,7 +456,7 @@
       document.body.classList.add('moving');
       applyGravity()
         .then(() => applyHorizontalCompaction())
-        .then(() => { document.body.classList.remove('moving'); inTransition = false; checkWin(); });
+        .then(() => { ensureSolvableIfLocked(); document.body.classList.remove('moving'); inTransition = false; checkWin(); });
     } else {
       // Not connectable within 2 turns
       pulse(tileEl, 'warn');
@@ -727,7 +727,8 @@
       tip: 'เคล็ดลับ: เชื่อมไทล์ที่เหมือนกันโดยหักเลี้ยวได้ไม่เกิน 2 ครั้ง',
       reset_zoom: 'รีเซ็ตการซูม',
       tileset_label: 'ชุดไทล์', tileset_thai: 'ไทย', tileset_dino: 'ไดโนเสาร์', language_label: 'ภาษา',
-      level_cleared: (n)=>`ผ่านด่าน ${n} แล้ว!`, game_over: 'จบเกม — คะแนนเหลือ 0 เริ่มใหม่เพื่อเล่นอีกครั้ง.'
+      level_cleared: (n)=>`ผ่านด่าน ${n} แล้ว!`, game_over: 'จบเกม — คะแนนเหลือ 0 เริ่มใหม่เพื่อเล่นอีกครั้ง.',
+      auto_shuffle: 'ไม่มีทางเดิน — สับไทล์อัตโนมัติ'
     },
     en: {
       title: '3D Tile Connect', new_game: 'New Game', shuffle: 'Shuffle', hint: 'Hint',
@@ -737,7 +738,8 @@
       tip: 'Tip: Connect matching tiles with up to 2 turns.',
       reset_zoom: 'Reset Zoom',
       tileset_label: 'Tile set', tileset_thai: 'Thai', tileset_dino: 'Dinosaur', language_label: 'Language',
-      level_cleared: (n)=>`Level ${n} cleared!`, game_over: 'Game Over — Score reached 0. New Game to retry.'
+      level_cleared: (n)=>`Level ${n} cleared!`, game_over: 'Game Over — Score reached 0. New Game to retry.',
+      auto_shuffle: 'No moves — auto-shuffled'
     }
   };
   const lang = (getParam('lang','th') === 'en') ? 'en' : 'th';
@@ -917,16 +919,7 @@
 
   function doShuffle() {
     if (gameOver || inTransition) return;
-    // collect all symbols
-    const syms = [];
-    for (let r=1;r<=ROWS;r++) for (let c=1;c<=COLS;c++) if (grid[r][c]) syms.push(grid[r][c]);
-    shuffle(syms);
-    let i=0;
-    for (let r=1;r<=ROWS;r++) for (let c=1;c<=COLS;c++) if (grid[r][c]) grid[r][c] = syms[i++];
-    renderGrid();
-    clearSelection();
-    SFX.play('shuffle');
-    adjustScore(-PENALTY_SHUFFLE);
+    shuffleBoard({ penalize: true, playSound: true });
   }
 
   function doHint() {
@@ -973,6 +966,37 @@
     }
   }
 
+  function shuffleBoard(opts = {}) {
+    const penalize = !!opts.penalize;
+    const playSound = opts.playSound !== false;
+    // collect all symbols currently on board
+    const syms = [];
+    for (let r=1;r<=ROWS;r++) for (let c=1;c<=COLS;c++) if (grid[r][c]) syms.push(grid[r][c]);
+    shuffle(syms);
+    let i=0;
+    for (let r=1;r<=ROWS;r++) for (let c=1;c<=COLS;c++) if (grid[r][c]) grid[r][c] = syms[i++];
+    renderGrid();
+    clearSelection();
+    if (playSound) SFX.play('shuffle');
+    if (penalize) adjustScore(-PENALTY_SHUFFLE);
+  }
+
+  function ensureSolvableIfLocked() {
+    if (remaining <= 0) return; // nothing to solve
+    if (findAnyMatch()) return; // already solvable
+    // Try a limited number of shuffles to find a solvable layout.
+    let tries = 0;
+    let solvable = false;
+    while (tries < 25) {
+      shuffleBoard({ penalize: false, playSound: tries === 0 });
+      tries++;
+      if (findAnyMatch()) { solvable = true; break; }
+    }
+    if (solvable) {
+      showToast(I18N[lang].auto_shuffle || (lang==='th'?'ไม่มีทางเดิน — สับไทล์อัตโนมัติ':'No moves — auto-shuffled'), 'info', 900);
+    }
+  }
+
   // Manual rotate disabled: board uses fixed tilt only.
 
   function init() {
@@ -993,6 +1017,7 @@
     // fixed tilt; no manual reset
     createGrid();
     renderGrid();
+    ensureSolvableIfLocked();
     clearSelection();
     updateStats();
     startTimer();
@@ -1029,6 +1054,7 @@
       renderGrid();
       clearSelection();
       updateStats();
+      ensureSolvableIfLocked();
     }
     updatePerfMode();
   }
