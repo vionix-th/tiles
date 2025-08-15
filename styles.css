@@ -201,9 +201,9 @@ input[type="number"].sel { -moz-appearance: textfield; }
 
 /* In-game floating controls (Shuffle, Hint) */
 .ingame-controls {
-  position: fixed; /* bottom-centered, independent of board */
+  position: absolute; /* relative to #board-wrapper */
   left: 50%;
-  bottom: calc(6px + var(--safe-bottom));
+  bottom: 56px; /* clear of toast and footer */
   transform: translateX(-50%);
   display: flex;
   flex-direction: row; /* horizontal alignment */
@@ -368,17 +368,17 @@ input[type="number"].sel { -moz-appearance: textfield; }
   100% { transform: translateY(120%) rotate(540deg); }
 }
 @keyframes win-bounce {
-  0% { transform: translateZ(0) rotateX(var(--board-rotate-x)) rotateY(var(--board-rotate-y)) scale(1); }
-  30% { transform: translateZ(0) rotateX(calc(var(--board-rotate-x) - 2deg)) rotateY(var(--board-rotate-y)) scale(1.04); }
-  60% { transform: translateZ(0) rotateX(calc(var(--board-rotate-x) + 1deg)) rotateY(var(--board-rotate-y)) scale(1.02); }
-  100% { transform: translateZ(0) rotateX(var(--board-rotate-x)) rotateY(var(--board-rotate-y)) scale(1); }
+  0% { transform: translateY(var(--board-offset-y)) translateZ(0) rotateX(var(--board-rotate-x)) rotateY(var(--board-rotate-y)) scale(1); }
+  30% { transform: translateY(var(--board-offset-y)) translateZ(0) rotateX(calc(var(--board-rotate-x) - 2deg)) rotateY(var(--board-rotate-y)) scale(1.04); }
+  60% { transform: translateY(var(--board-offset-y)) translateZ(0) rotateX(calc(var(--board-rotate-x) + 1deg)) rotateY(var(--board-rotate-y)) scale(1.02); }
+  100% { transform: translateY(var(--board-offset-y)) translateZ(0) rotateX(var(--board-rotate-x)) rotateY(var(--board-rotate-y)) scale(1); }
 }
 @keyframes lose-shake {
-  0%, 100% { transform: translateZ(0) rotateX(var(--board-rotate-x)) rotateY(var(--board-rotate-y)); }
-  20% { transform: translateZ(0) rotateX(var(--board-rotate-x)) rotateY(calc(var(--board-rotate-y) - 2deg)); }
-  40% { transform: translateZ(0) rotateX(var(--board-rotate-x)) rotateY(calc(var(--board-rotate-y) + 2deg)); }
-  60% { transform: translateZ(0) rotateX(var(--board-rotate-x)) rotateY(calc(var(--board-rotate-y) - 1deg)); }
-  80% { transform: translateZ(0) rotateX(var(--board-rotate-x)) rotateY(calc(var(--board-rotate-y) + 1deg)); }
+  0%, 100% { transform: translateY(var(--board-offset-y)) translateZ(0) rotateX(var(--board-rotate-x)) rotateY(var(--board-rotate-y)); }
+  20% { transform: translateY(var(--board-offset-y)) translateZ(0) rotateX(var(--board-rotate-x)) rotateY(calc(var(--board-rotate-y) - 2deg)); }
+  40% { transform: translateY(var(--board-offset-y)) translateZ(0) rotateX(var(--board-rotate-x)) rotateY(calc(var(--board-rotate-y) + 2deg)); }
+  60% { transform: translateY(var(--board-offset-y)) translateZ(0) rotateX(var(--board-rotate-x)) rotateY(calc(var(--board-rotate-y) - 1deg)); }
+  80% { transform: translateY(var(--board-offset-y)) translateZ(0) rotateX(var(--board-rotate-x)) rotateY(calc(var(--board-rotate-y) + 1deg)); }
 }
 .victory .board { animation: win-bounce 700ms ease; }
 .defeat .board { animation: lose-shake 600ms ease; filter: grayscale(0.6) saturate(0.6) brightness(0.9); }
@@ -398,8 +398,8 @@ input[type="number"].sel { -moz-appearance: textfield; }
 }
 @media (max-width: 768px) {
   :root { --tile-size: 48px; --tile-gap: 8px; }
-  /* keep controls centered at bottom on small screens */
-  .ingame-controls { left: 50%; transform: translateX(-50%); bottom: calc(6px + var(--safe-bottom)); }
+  /* keep controls centered and raised above bottom */
+  .ingame-controls { left: 50%; transform: translateX(-50%); bottom: 64px; }
   .topbar, .bottombar { padding: 8px 10px; }
   .controls { padding: 4px 6px; }
   :root { --control-h: 32px; }
@@ -421,6 +421,7 @@ input[type="number"].sel { -moz-appearance: textfield; }
   .btn { height: 34px; line-height: 34px; }
   .btn.fab { height: 38px; min-width: 38px; }
   .game-area { padding: 8px; }
+  .ingame-controls { bottom: 70px; }
   /* Fullscreen-like dialog */
   .dialog { align-items: end; }
   .dialog-content { width: 100%; max-width: none; margin: 0; border-radius: 14px 14px 0 0; max-height: 90svh; overflow: auto; }
