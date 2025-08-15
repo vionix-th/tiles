@@ -293,13 +293,7 @@ input[type="number"].sel { -moz-appearance: textfield; }
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
 }
 
-/* SpriteSheet mode: each tile shows a region of one big image */
-.tile.sprite {
-  background-image: var(--sheet-image);
-  background-repeat: no-repeat;
-  /* background-size is set to N*100% so each frame maps to tile bounds */
-  background-size: calc(var(--sheet-cols, 1) * 100%) calc(var(--sheet-rows, 1) * 100%);
-}
+/* SpriteSheet mode removed */
 
 .tile::after {
   content: "";
@@ -463,25 +457,8 @@ input[type="number"].sel { -moz-appearance: textfield; }
   #board-wrapper { max-width: 1280px; max-height: 780px; }
 }
 
-/* Performance mode for large grids */
-.perf .tile {
-  box-shadow: none;
-  background: #e9ecf9;
-  transition: transform 80ms ease, opacity 160ms ease;
-}
-.perf .tile::after { display: none; }
-.perf .tile:hover { transform: none; }
-.perf .path-seg { box-shadow: none; height: 3px; opacity: 0.8; }
-.perf .confetti { width: 8px; height: 10px; }
+/* Performance mode removed */
 
 /* Drag rotate removed; no dragging state needed */
 
-/* During tile shifting animations, simplify visuals for performance */
-.moving .board { pointer-events: none; }
-.moving .tile {
-  box-shadow: none;
-  filter: none;
-  transition: transform 150ms ease, opacity 160ms ease;
-}
-.moving .tile img { filter: none; }
-.moving .path-seg { box-shadow: none; opacity: 0.75; }
+/* Shifting animations removed (no .moving state) */

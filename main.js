@@ -54,11 +54,6 @@
   const TILE_SVG = Object.fromEntries(TILE_KEYS.map(k => [k, `assets/tiles/${k}.svg`]));
   const TILE_FALLBACK = 'assets/tiles/placeholder.svg';
 
-  // Optional Spritesheet mode via URL params
-  const SHEET_URL = getParam('sheet', null);
-  const SHEET_COLS = parseInt(getParam('sheetCols', '0'), 10) || 0;
-  const SHEET_ROWS = parseInt(getParam('sheetRows', '0'), 10) || 0;
-  const USE_SHEET = !!(SHEET_URL && SHEET_COLS > 0 && SHEET_ROWS > 0);
 
   // State
   let grid = [];         // (ROWS+2) x (COLS+2) grid including boundary
@@ -82,14 +77,6 @@
   // Performance helpers
   function prefersReducedMotion() {
     return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  }
-  function computeMoveMs() {
-    const tiles = ROWS * COLS;
-    let ms = 180;
-    if (tiles >= 1600) ms = 110; // very large boards
-    else if (tiles >= 800) ms = 140; // large boards
-    if (prefersReducedMotion()) ms -= 50;
-    return Math.max(90, ms);
   }
 
   // Utils
@@ -352,13 +339,6 @@
     setBoardDims(ROWS, COLS);
     nodes = Array.from({length: ROWS}, () => Array.from({length: COLS}, () => null));
 
-    // Spritesheet CSS variables (set once)
-    if (USE_SHEET) {
-      boardEl.style.setProperty('--sheet-image', `url('${SHEET_URL}')`);
-      boardEl.style.setProperty('--sheet-cols', String(SHEET_COLS));
-      boardEl.style.setProperty('--sheet-rows', String(SHEET_ROWS));
-    }
-
     const frag = document.createDocumentFragment();
     for (let r=1; r<=ROWS; r++) {
       for (let c=1; c<=COLS; c++) {
@@ -372,28 +352,16 @@
           tile.className = 'tile';
           tile.dataset.type = grid[r][c];
           tile.setAttribute('aria-label', `Tile ${grid[r][c]}`);
-          if (USE_SHEET) {
-            tile.classList.add('sprite');
-            // map key to index in sheet by TILE_KEYS order
-            const idx = TILE_KEYS.indexOf(grid[r][c]);
-            const col = (idx % SHEET_COLS + SHEET_COLS) % SHEET_COLS;
-            const row = Math.floor(idx / SHEET_COLS);
-            // compute position percentages safely
-            const xPerc = (SHEET_COLS > 1) ? (col * 100 / (SHEET_COLS - 1)) : 0;
-            const yPerc = (SHEET_ROWS > 1) ? (row * 100 / (SHEET_ROWS - 1)) : 0;
-            tile.style.backgroundPosition = `${xPerc}% ${yPerc}%`;
-          } else {
-            const img = document.createElement('img');
-            img.alt = grid[r][c];
-            img.draggable = false;
-            img.decoding = 'async';
-            img.src = TILE_PNG[grid[r][c]] || TILE_SVG[grid[r][c]] || TILE_FALLBACK;
-            img.onerror = () => {
-              if (img.src.endsWith('.png') && TILE_SVG[grid[r][c]]) { img.src = TILE_SVG[grid[r][c]]; return; }
-              img.src = TILE_FALLBACK; img.onerror = null;
-            };
-            tile.appendChild(img);
-          }
+          const img = document.createElement('img');
+          img.alt = grid[r][c];
+          img.draggable = false;
+          img.decoding = 'async';
+          img.src = TILE_PNG[grid[r][c]] || TILE_SVG[grid[r][c]] || TILE_FALLBACK;
+          img.onerror = () => {
+            if (img.src.endsWith('.png') && TILE_SVG[grid[r][c]]) { img.src = TILE_SVG[grid[r][c]]; return; }
+            img.src = TILE_FALLBACK; img.onerror = null;
+          };
+          tile.appendChild(img);
           cell.appendChild(tile);
         }
         nodes[r-1][c-1] = cell;
@@ -403,7 +371,6 @@
     boardEl.appendChild(frag);
     // Recompute tile size once DOM is updated
     adjustTileScale();
-    updatePerfMode();
   }
 
   function onTileClickEl(tileEl) {
@@ -451,12 +418,8 @@
       remaining -= 2;
       updateStats();
       clearSelection();
-      // After removal animation, apply gravity, then horizontal compaction, then check for win
-      inTransition = true;
-      document.body.classList.add('moving');
-      applyGravity()
-        .then(() => applyHorizontalCompaction())
-        .then(() => { ensureSolvableIfLocked(); document.body.classList.remove('moving'); inTransition = false; checkWin(); });
+      // After removal, do not shift remaining tiles; just ensure solvable and check win
+      setTimeout(() => { ensureSolvableIfLocked(); checkWin(); }, 340);
     } else {
       // Not connectable within 2 turns
       pulse(tileEl, 'warn');
@@ -507,128 +470,7 @@
     }, 320);
   }
 
-  function applyGravity() {
-    return new Promise((resolve) => {
-      // Plan moves per column: pull down to fill gaps
-      const moves = [];
-      for (let c = 1; c <= COLS; c++) {
-        let write = ROWS;
-        for (let r = ROWS; r >= 1; r--) {
-          if (grid[r][c] !== 0) {
-            if (r !== write) {
-              moves.push({ from: { r, c }, to: { r: write, c } });
-            }
-            write--;
-          }
-        }
-      }
-      if (moves.length === 0) {
-        resolve();
-        return;
-      }
-      // Animate moves using DOM positions
-      // Batch DOM reads (getBoundingClientRect) before writes (style changes)
-      overlayEl.getBoundingClientRect(); // force layout once
-      const centerCache = new Map();
-      const keyFor = (r, c) => r + ',' + c;
-      const getCenter = (r, c) => {
-        const k = keyFor(r, c);
-        if (centerCache.has(k)) return centerCache.get(k);
-        const cell = nodes[r-1]?.[c-1];
-        const rect = cell?.getBoundingClientRect();
-        const val = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
-        centerCache.set(k, val);
-        return val;
-      };
-      // Read phase: compute centers for all from/to
-      moves.forEach(({from, to}) => { getCenter(from.r, from.c); getCenter(to.r, to.c); });
-      // Write phase: apply transforms in next frame
-      const MOVE_MS = computeMoveMs();
-      requestAnimationFrame(() => {
-        moves.forEach(({from, to}) => {
-          const el = nodes[from.r-1][from.c-1].querySelector('.tile');
-          if (!el) return;
-          const a = getCenter(from.r, from.c);
-          const b = getCenter(to.r, to.c);
-          const dy = b.y - a.y;
-          el.style.transition = `transform ${MOVE_MS}ms ease`;
-          el.style.transform = `translate3d(0, ${dy}px, 10px)`;
-          el.style.pointerEvents = 'none';
-        });
-      });
-      // After animation, update grid and rerender
-      setTimeout(() => {
-        for (let c = 1; c <= COLS; c++) {
-          const colVals = [];
-          for (let r = ROWS; r >= 1; r--) if (grid[r][c] !== 0) colVals.push(grid[r][c]);
-          for (let r = ROWS; r >= 1; r--) {
-            const val = colVals[ROWS - r] ?? 0;
-            grid[r][c] = val;
-          }
-        }
-        renderGrid();
-        resolve();
-      }, MOVE_MS + 12);
-    });
-  }
-
-  function applyHorizontalCompaction() {
-    return new Promise((resolve) => {
-      const moves = [];
-      for (let r = 1; r <= ROWS; r++) {
-        let write = 1; // fill from left to right
-        for (let c = 1; c <= COLS; c++) {
-          if (grid[r][c] !== 0) {
-            if (c !== write) {
-              moves.push({ from: { r, c }, to: { r, c: write } });
-            }
-            write++;
-          }
-        }
-      }
-      if (moves.length === 0) { resolve(); return; }
-      // Batch DOM reads (getBoundingClientRect) before writes
-      const centerCache = new Map();
-      const keyFor = (r, c) => r + ',' + c;
-      const getCenter = (r, c) => {
-        const k = keyFor(r, c);
-        if (centerCache.has(k)) return centerCache.get(k);
-        const cell = nodes[r-1]?.[c-1];
-        const rect = cell?.getBoundingClientRect();
-        const val = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
-        centerCache.set(k, val);
-        return val;
-      };
-      // Read phase
-      moves.forEach(({from, to}) => { getCenter(from.r, from.c); getCenter(to.r, to.c); });
-      // Write phase
-      const MOVE_MS = computeMoveMs();
-      requestAnimationFrame(() => {
-        moves.forEach(({from, to}) => {
-          const el = nodes[from.r-1][from.c-1].querySelector('.tile');
-          if (!el) return;
-          const a = getCenter(from.r, from.c);
-          const b = getCenter(to.r, to.c);
-          const dx = b.x - a.x;
-          el.style.transition = `transform ${MOVE_MS}ms ease`;
-          el.style.transform = `translate3d(${dx}px, 0, 10px)`;
-          el.style.pointerEvents = 'none';
-        });
-      });
-      setTimeout(() => {
-        for (let r = 1; r <= ROWS; r++) {
-          const rowVals = [];
-          for (let c = 1; c <= COLS; c++) if (grid[r][c] !== 0) rowVals.push(grid[r][c]);
-          for (let c = 1; c <= COLS; c++) {
-            const val = rowVals[c-1] ?? 0;
-            grid[r][c] = val;
-          }
-        }
-        renderGrid();
-        resolve();
-      }, MOVE_MS + 12);
-    });
-  }
+  // Tile shifting (gravity/compaction) removed
 
   function updateStats() {
     matchesEl.textContent = String(matches);
@@ -1032,7 +874,6 @@
     setBoardDims(ROWS, COLS);
     // Regenerate icons if desired (kept same size for performance)
     adjustTileScale();
-    updatePerfMode();
     // fixed tilt; no manual reset
     createGrid();
     renderGrid();
@@ -1056,7 +897,6 @@
       updateStats();
       ensureSolvableIfLocked();
     }
-    updatePerfMode();
   }
 
   function adjustScore(delta) {
@@ -1125,15 +965,15 @@
     fxEl.innerHTML = '';
     const colors = ['#ff6b6b','#ffd93d','#6bd6ff','#9f7bff','#57e39f'];
     const tilesCount = ROWS * COLS;
-    const perf = document.body.classList.contains('perf') || prefersReducedMotion();
+    const reduceMotion = prefersReducedMotion();
     const base = Math.max(20, Math.min(count, Math.floor(count * (600 / Math.max(600, tilesCount)))));
-    const scaledCount = perf ? Math.floor(base * 0.5) : base;
+    const scaledCount = reduceMotion ? Math.floor(base * 0.5) : base;
     for (let i=0;i<scaledCount;i++) {
       const d = document.createElement('div');
       d.className = 'confetti';
       const left = Math.random()*100;
       const delay = Math.random()*0.2;
-      const dur = perf ? Math.max(0.8, 0.8 * (duration/1000)) : (duration/1000);
+      const dur = reduceMotion ? Math.max(0.8, 0.8 * (duration/1000)) : (duration/1000);
       const time = (0.9 + Math.random()*0.6) * dur;
       const color = colors[i % colors.length];
       d.style.left = left + '%';
@@ -1143,15 +983,8 @@
       d.style.animationDelay = delay + 's';
       fxEl.appendChild(d);
     }
-    const endDur = (document.body.classList.contains('perf') ? Math.floor(duration * 0.8) : duration) + 400;
+    const endDur = (reduceMotion ? Math.floor(duration * 0.8) : duration) + 400;
     setTimeout(() => { fxEl.innerHTML = ''; }, endDur);
-  }
-
-  function updatePerfMode() {
-    const tiles = ROWS * COLS;
-    const lowCore = (navigator.hardwareConcurrency || 4) <= 4;
-    const reduce = prefersReducedMotion();
-    if (tiles >= 800 || lowCore || reduce) document.body.classList.add('perf'); else document.body.classList.remove('perf');
   }
 
   function applyBackground(theme) {
