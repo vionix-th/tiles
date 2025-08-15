@@ -150,8 +150,7 @@ input[type="number"].sel { -moz-appearance: textfield; }
   perspective: 1100px;
   user-select: none;
   overflow: visible; /* allow rotated board edges/paths to render fully */
-  /* Allow custom pinch-zoom via Pointer Events without browser zoom */
-  touch-action: none;
+  /* No custom pinch-zoom; allow native behavior */
 }
 
 .board {

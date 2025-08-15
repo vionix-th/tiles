@@ -20,16 +20,7 @@
   const fxEl = document.getElementById('fx');
   const pageBgEl = document.getElementById('page-bg');
 
-  // User zoom override (multiplies auto scale)
-  let USER_SCALE = 1; // 1.0 = no override
-  const MIN_USER_SCALE = 0.6;
-  const MAX_USER_SCALE = 1.6;
-  let LAST_AUTO_SCALE = 1; // updated by adjustTileScale
-
-  function applyBoardScale(autoScale) {
-    const final = Math.max(0.4, Math.min(2.0, autoScale * USER_SCALE));
-    document.documentElement.style.setProperty('--board-scale', String(final));
-  }
+  // Board scale driven solely by auto-fit
 
   // Config (dynamic sizing per level)
   let ROWS = 8;        // interior rows (without outer boundary)
@@ -285,8 +276,7 @@
       const minNeedH = tileSize * ROWS + gap * (ROWS + 1);
       scale = Math.min(wAvail / Math.max(1, minNeedW), hAvail / Math.max(1, minNeedH), 1);
     }
-    LAST_AUTO_SCALE = scale;
-    applyBoardScale(LAST_AUTO_SCALE);
+    document.documentElement.style.setProperty('--board-scale', String(scale));
 
     // Adjust tilt slightly when vertical space is tight to save height
     const targetTilt = (hAvail < 520) ? 22 : (hAvail < 640) ? 26 : 30;
@@ -604,9 +594,7 @@
   newGameBtn.addEventListener('click', () => { closeMenu(); init(); });
   shuffleBtn.addEventListener('click', doShuffle);
   hintBtn.addEventListener('click', doHint);
-  const resetZoomBtn = document.getElementById('resetZoomBtn');
-  if (resetZoomBtn) resetZoomBtn.addEventListener('click', () => { USER_SCALE = 1; applyBoardScale(LAST_AUTO_SCALE); showToast((lang==='th'?'ซูมถูกรีเซ็ต':'Zoom reset')); });
-  // reset view control removed
+  // reset zoom control removed
   if (soundBtn) {
     const applyIcon = () => {
       soundBtn.textContent = SFX.enabled ? '🔊' : '🔇';
@@ -657,104 +645,7 @@
     _resizeDebounce = setTimeout(() => { reEvaluateLayout(); }, 200);
   });
 
-  // Pinch-to-zoom and Ctrl+Wheel zoom on wrapper
-  (function setupZoomGestures(){
-    const wrapper = document.getElementById('board-wrapper');
-    if (!wrapper) return;
-    const pointers = new Map(); // id -> {x,y}
-    let pinchStartDist = 0;
-    let pinchStartUserScale = 1;
-    let isPinching = false;
-    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-
-    function updateZoomToast() {
-      const pct = Math.round(USER_SCALE * 100);
-      showToast((lang === 'th' ? `ซูม ${pct}%` : `Zoom ${pct}%`), 'info', 700);
-    }
-
-    wrapper.addEventListener('pointerdown', (e) => {
-      if (e.pointerType !== 'touch') return;
-      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (pointers.size === 2) {
-        const [a, b] = [...pointers.values()];
-        pinchStartDist = dist(a, b) || 1;
-        pinchStartUserScale = USER_SCALE;
-        isPinching = true;
-      }
-    });
-    wrapper.addEventListener('pointermove', (e) => {
-      if (!pointers.has(e.pointerId)) return;
-      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (isPinching && pointers.size >= 2) {
-        const [a, b] = [...pointers.values()];
-        const d = dist(a, b) || 1;
-        const factor = d / pinchStartDist;
-        USER_SCALE = clamp(pinchStartUserScale * factor, MIN_USER_SCALE, MAX_USER_SCALE);
-        // Only update board scale; avoid tile size recompute for smoother pinch
-        applyBoardScale(LAST_AUTO_SCALE);
-        updateZoomToast();
-        e.preventDefault();
-      }
-    }, { passive: false });
-    function endPointer(e) {
-      pointers.delete(e.pointerId);
-      if (pointers.size < 2 && isPinching) {
-        // Give a brief cooldown so clicks don't fire
-        isPinching = false;
-        setTimeout(() => { /* cooldown over */ }, 120);
-      }
-    }
-    wrapper.addEventListener('pointerup', endPointer);
-    wrapper.addEventListener('pointercancel', endPointer);
-    wrapper.addEventListener('pointerleave', (e) => { if (pointers.has(e.pointerId)) endPointer(e); });
-
-    // Ctrl+wheel zoom (trackpads and desktops). Prevents default when active.
-    wrapper.addEventListener('wheel', (e) => {
-      if (!e.ctrlKey) return; // only treat pinch-zoom like events
-      e.preventDefault();
-      const delta = -e.deltaY; // up = zoom in
-      const factor = Math.exp(delta * 0.0015);
-      USER_SCALE = clamp(USER_SCALE * factor, MIN_USER_SCALE, MAX_USER_SCALE);
-      applyBoardScale(LAST_AUTO_SCALE);
-      updateZoomToast();
-    }, { passive: false });
-
-    // Guard clicks during pinch
-    boardEl.addEventListener('click', (ev) => {
-      if (isPinching) ev.stopPropagation();
-    }, true);
-
-    // Safari gesture events fallback (iOS)
-    if ('ongesturestart' in window) {
-      let base = 1;
-      wrapper.addEventListener('gesturestart', (e) => {
-        base = USER_SCALE;
-        e.preventDefault();
-      }, { passive: false });
-      wrapper.addEventListener('gesturechange', (e) => {
-        USER_SCALE = clamp(base * (e.scale || 1), MIN_USER_SCALE, MAX_USER_SCALE);
-        applyBoardScale(LAST_AUTO_SCALE);
-        e.preventDefault();
-      }, { passive: false });
-      wrapper.addEventListener('gestureend', (e) => {
-        e.preventDefault();
-      }, { passive: false });
-    }
-
-    // Double-tap to reset zoom
-    let lastTap = 0;
-    wrapper.addEventListener('touchend', (e) => {
-      const now = Date.now();
-      if (now - lastTap < 300) {
-        USER_SCALE = 1;
-        applyBoardScale(LAST_AUTO_SCALE);
-        updateZoomToast();
-        e.preventDefault();
-      }
-      lastTap = now;
-    }, { passive: false });
-  })();
+  // Zoom gestures removed; rely on auto-fit only
 
   function doShuffle() {
     if (gameOver || inTransition) return;
