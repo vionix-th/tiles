@@ -408,8 +408,14 @@
       remaining -= 2;
       updateStats();
       clearSelection();
-      // After removal, do not shift remaining tiles; just ensure solvable and check win
-      setTimeout(() => { ensureSolvableIfLocked(); checkWin(); }, 340);
+      // After removal, apply vertical gravity then horizontal compaction; then ensure solvable and check win
+      setTimeout(() => {
+        applyGravityInPlace();
+        applyHorizontalCompactionInPlace();
+        renderGrid();
+        ensureSolvableIfLocked();
+        checkWin();
+      }, 340);
     } else {
       // Not connectable within 2 turns
       pulse(tileEl, 'warn');
@@ -460,7 +466,36 @@
     }, 320);
   }
 
-  // Tile shifting (gravity/compaction) removed
+  // Tile shifting (gravity/compaction)
+  function applyGravityInPlace() {
+    for (let c = 1; c <= COLS; c++) {
+      let write = ROWS;
+      for (let r = ROWS; r >= 1; r--) {
+        if (grid[r][c] !== 0) {
+          if (r !== write) {
+            grid[write][c] = grid[r][c];
+            grid[r][c] = 0;
+          }
+          write--;
+        }
+      }
+    }
+  }
+
+  function applyHorizontalCompactionInPlace() {
+    for (let r = 1; r <= ROWS; r++) {
+      let write = 1;
+      for (let c = 1; c <= COLS; c++) {
+        if (grid[r][c] !== 0) {
+          if (c !== write) {
+            grid[r][write] = grid[r][c];
+            grid[r][c] = 0;
+          }
+          write++;
+        }
+      }
+    }
+  }
 
   function updateStats() {
     matchesEl.textContent = String(matches);
