@@ -82,18 +82,20 @@ function svgForKey(key) {
 }
 
 async function main() {
-  await fs.mkdir(OUT_DIR, { recursive: true });
-  const keys = [...new Set([...TILE_KEYS.thai, ...TILE_KEYS.dinosaur])];
+  // Write placeholders into theme subfolders: assets/tiles/<theme>/<key>.svg
   let created = 0;
-  for (const key of keys) {
-    const out = path.join(OUT_DIR, `${key}.svg`);
-    if (!FORCE && await exists(out)) { continue; }
-    const svg = svgForKey(key);
-    await fs.writeFile(out, svg, 'utf8');
-    created++;
+  for (const [theme, list] of Object.entries(TILE_KEYS)) {
+    const themeDir = path.join(OUT_DIR, theme);
+    await fs.mkdir(themeDir, { recursive: true });
+    for (const key of list) {
+      const out = path.join(themeDir, `${key}.svg`);
+      if (!FORCE && await exists(out)) { continue; }
+      const svg = svgForKey(key);
+      await fs.writeFile(out, svg, 'utf8');
+      created++;
+    }
   }
   console.log(`SVG placeholders ${FORCE? 'written' : 'created if missing'}: ${created}`);
 }
 
 main().catch(err => { console.error(err); process.exit(1); });
-

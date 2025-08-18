@@ -5,7 +5,9 @@
 - `styles.css`: Visual styles for the game and UI.
 - `main.js`: Vanilla JS game logic, rendering, input, and i18n.
 - `assets/`: Shipped art used by the app (PNGs preferred at runtime; SVG fallbacks).
-  - `assets/tiles_png/`, `assets/tiles/`, `assets/backgrounds_png/`.
+  - `assets/tiles_png/` with per-theme subfolders `thai/` and `dinosaur/`.
+  - `assets/tiles/` with per-theme subfolders `thai/` and `dinosaur/`.
+  - `assets/backgrounds_png/`.
 - `tools/`: Optional Node.js ESM scripts to generate/refresh assets.
 
 ## Build, Test, and Development Commands

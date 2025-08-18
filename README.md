@@ -1,4 +1,4 @@
-# 3D Tile Connect
+# vxThails
 
 A lightweight, client‑side tile matching game you can open in a browser. Includes two visual themes: Thai and Dinosaurs. The app runs as a static site (no server required) and ships with prebuilt PNG/SVG assets under `assets/`.
 
@@ -37,7 +37,11 @@ You can open `index.html` directly, or serve the folder with a simple static ser
 - `main.js` – Game logic, rendering, input, i18n
 - `assets/` – Tile and background art
   - `assets/tiles_png/` – PNG tiles used by the game
-  - `assets/tiles/` – SVG placeholders
+    - `assets/tiles_png/thai/` – Thai set PNGs
+    - `assets/tiles_png/dinosaur/` – Dinosaur set PNGs
+  - `assets/tiles/` – SVG placeholders (by theme)
+    - `assets/tiles/thai/` – Thai set SVGs
+    - `assets/tiles/dinosaur/` – Dinosaur set SVGs
   - `assets/backgrounds_png/` – Backgrounds per theme
 - `tools/` – Asset generation utilities (Node.js)
 
@@ -50,7 +54,7 @@ Creates stylized placeholder SVGs for all known tile keys, useful if a PNG is mi
 ```bash
 node tools/generate_placeholder_svgs.mjs [--force] [--palette=color|mono]
 ```
-- Output: `assets/tiles/<key>.svg`
+- Output: `assets/tiles/<set>/<key>.svg`
 
 ### Themed PNG tiles via OpenAI Images API
 Generates glossy PNG icons for either tile set. Requires an API key.
@@ -61,7 +65,7 @@ OPENAI_API_KEY=sk-... node tools/generate_thai_tiles.mjs \
   [--size=1024x1024] [--concurrency=2] [--force] [--no-resize] \
   [--sheet-cols=N --sheet-rows=N --sheet-name=name]
 ```
-- Output: `assets/tiles_png/<key>.png`
+- Output: `assets/tiles_png/<set>/<key>.png`
 - Backgrounds: `assets/backgrounds_png/<set>.png`
 - Resizing: uses `sips` on macOS, or ImageMagick if available; disable with `--no-resize`.
 

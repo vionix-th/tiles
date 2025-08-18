@@ -1,4 +1,4 @@
-/* 3D Tile Connect - Vanilla JS */
+/* vxThails - Vanilla JS */
 (function () {
   const boardEl = document.getElementById('board');
   const timeEl = document.getElementById('time');
@@ -40,8 +40,9 @@
   function getParam(name, def) { const u=new URLSearchParams(location.search); return u.get(name) ?? def; }
   const currentTileSet = (getParam('tileset','thai') in TILE_SETS) ? getParam('tileset','thai') : 'thai';
   const TILE_KEYS = TILE_SETS[currentTileSet];
-  const TILE_PNG = Object.fromEntries(TILE_KEYS.map(k => [k, `assets/tiles_png/${k}.png`]));
-  const TILE_SVG = Object.fromEntries(TILE_KEYS.map(k => [k, `assets/tiles/${k}.svg`]));
+  // Load tiles from theme-specific subfolders
+  const TILE_PNG = Object.fromEntries(TILE_KEYS.map(k => [k, `assets/tiles_png/${currentTileSet}/${k}.png`]));
+  const TILE_SVG = Object.fromEntries(TILE_KEYS.map(k => [k, `assets/tiles/${currentTileSet}/${k}.svg`]));
   const TILE_FALLBACK = 'assets/tiles/placeholder.svg';
 
 
@@ -649,7 +650,7 @@
   // I18N
   const I18N = {
     th: {
-      title: 'จับคู่ไทล์ 3D', new_game: 'เริ่มใหม่', shuffle: 'สับไทล์', hint: 'คำใบ้',
+      title: 'vxThails', new_game: 'เริ่มใหม่', shuffle: 'สับไทล์', hint: 'คำใบ้',
       level: 'ด่าน', score: 'คะแนน', time: 'เวลา', matches: 'จับคู่', remaining: 'คงเหลือ',
       start_level: 'ด่านเริ่มต้น',
       menu: 'เมนู', menu_title: 'เมนูเกม',
@@ -660,7 +661,7 @@
       close: 'ปิด'
     },
     en: {
-      title: '3D Tile Connect', new_game: 'New Game', shuffle: 'Shuffle', hint: 'Hint',
+      title: 'vxThails', new_game: 'New Game', shuffle: 'Shuffle', hint: 'Hint',
       level: 'Level', score: 'Score', time: 'Time', matches: 'Matches', remaining: 'Remaining',
       start_level: 'Start level',
       menu: 'Menu', menu_title: 'Game Menu',

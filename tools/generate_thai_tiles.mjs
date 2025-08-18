@@ -9,7 +9,7 @@
  *     [--sheet-cols=N --sheet-rows=N --sheet-name=name]
  *
  * Output:
- *   assets/tiles_png/<key>.png
+ *   assets/tiles_png/<set>/<key>.png
  */
 
 import fs from 'fs/promises';
@@ -24,7 +24,7 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-const OUT_DIR = path.resolve(process.cwd(), 'assets/tiles_png');
+const OUT_DIR = path.resolve(process.cwd(), `assets/tiles_png/${(process.argv.find(a=>a.startsWith('--set='))||'--set=thai').split('=')[1]}`);
 const BG_DIR = path.resolve(process.cwd(), 'assets/backgrounds_png');
 
 const SET = (process.argv.find(a=>a.startsWith('--set=')) || '--set=thai').split('=')[1];
