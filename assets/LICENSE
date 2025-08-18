@@ -1,0 +1,21 @@
+Assets License
+
+Unless otherwise noted below, the image assets in this repository are licensed under the Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0) license.
+
+Scope:
+- Includes: `assets/tiles_png/`, `assets/tiles/`, and `assets/backgrounds_png/` (all images and derived PNGs/SVGs).
+- Excludes: Any sound/audio files (see CREDITS.md), code files, and documentation.
+
+Attribution:
+- © Vionix Consulting. Please attribute “Vionix Consulting” with a link to the project repository when reusing the images.
+
+Share-Alike:
+- If you remix, transform, or build upon the images, you must distribute your contributions under the same license (CC BY-SA 4.0).
+
+Full License Text:
+- https://creativecommons.org/licenses/by-sa/4.0/
+- Legal code (PDF): https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+Third-Party Assets:
+- Any third-party assets (e.g., sounds/effects) are licensed separately; see the root-level `CREDITS.md` for details.
+

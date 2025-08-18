@@ -79,4 +79,8 @@ Notes:
 - Switch tile set and language from the in‑game menu.
 
 ## License
-This project is licensed under the GNU General Public License v3.0. See `LICENSE` for details.
+- Code: GPL-3.0-or-later — see `LICENSE`.
+- Images (`assets/tiles*`, `assets/backgrounds_png`): CC BY-SA 4.0 — see `assets/LICENSE`.
+- Sounds: third-party and licensed separately — see `CREDITS.md`.
+
+Copyright © Vionix Consulting
